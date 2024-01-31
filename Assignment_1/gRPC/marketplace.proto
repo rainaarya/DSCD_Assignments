@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package marketplace;
+
+// Enum for item categories
+enum Category {
+  ELECTRONICS = 0;
+  FASHION = 1;
+  OTHERS = 2;
+  ANY = 3;
+}
+
+// Message for item details
+message Item {
+  int32 id = 1;
+  string name = 2;
+  Category category = 3;
+  string description = 4;
+  int32 quantity = 5;
+  float price = 6;
+  float rating = 7;
+  string seller_address = 8;
+}
+
+// Message for seller registration
+message SellerRegistration {
+  string address = 1;
+  string uuid = 2;
+}
+
+// Message for adding, updating, deleting, and displaying items
+message ItemManagement {
+  string uuid = 1;
+  Item item = 2;
+}
+
+// Message for buyer operations
+message BuyerOperation {
+  int32 item_id = 1;
+  int32 quantity = 2;
+  string buyer_address = 3;
+  Category category = 4; // For search
+  int32 rating = 5; // For rating
+  string item_name = 6; // Added field for item name in search
+}
+
+// Response message
+message Response {
+  string message = 1;
+}
+
+// Message for notifications
+message Notification {
+  Item item = 1;
+  string message = 2;
+}
+
+// Empty message for NotifyClient request
+message Empty {}
+
+// Service definition
+service MarketplaceService {
+  rpc RegisterSeller(SellerRegistration) returns (Response);
+  rpc SellItem(ItemManagement) returns (Response);
+  rpc UpdateItem(ItemManagement) returns (Response);
+  rpc DeleteItem(ItemManagement) returns (Response);
+  rpc DisplaySellerItems(SellerRegistration) returns (stream Item);
+  rpc SearchItem(BuyerOperation) returns (stream Item);
+  rpc BuyItem(BuyerOperation) returns (Response);
+  rpc AddToWishList(BuyerOperation) returns (Response);
+  rpc RateItem(BuyerOperation) returns (Response);
+  rpc NotifyClient(Empty) returns (stream Notification);
+}
