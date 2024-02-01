@@ -13,6 +13,8 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
         self.item_id_counter = 1  # Unique item ID generator
         self.wishlists = {}  # Stores buyer wishlists
         self.notifications = {}  # key: client address, value: queue of notifications
+        self.item_ratings = {}  # New: Store ratings for each item {item_id: (total_rating, num_ratings)}
+        self.item_rated_by = {}  # New: Store which users rated each item {item_id: set([user_addresses])}
 
     def RegisterSeller(self, request, context):
         # Register a new seller
@@ -23,9 +25,13 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
         return marketplace_pb2.Response(message="SUCCESS")
 
     def SellItem(self, request, context):
+        if request.uuid not in self.sellers.values():
+            return marketplace_pb2.Response(message="FAIL: Unrecognized Seller UUID")
+        
         # Add a new item to the marketplace
         item = request.item
         item.id = self.item_id_counter
+        item.rating = -1  # Initialize rating to -1 (no ratings yet)
         self.items[self.item_id_counter] = item
         self.item_id_counter += 1
         print(f"\nSell Item request from {request.uuid}")
@@ -117,15 +123,27 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
     def RateItem(self, request, context):
         if request.item_id not in self.items:
             return marketplace_pb2.Response(message="FAIL: Item ID not found")
-        
-        item = self.items[request.item_id]
-        if not hasattr(item, 'total_rating'):
-            item.total_rating = 0
-            item.num_ratings = 0
 
-        item.total_rating += request.rating
-        item.num_ratings += 1
-        item.rating = item.total_rating / item.num_ratings
+        if request.item_id not in self.item_rated_by:
+            self.item_rated_by[request.item_id] = set()
+        
+        if request.buyer_address in self.item_rated_by[request.item_id]:
+            return marketplace_pb2.Response(message="FAIL: Buyer has already rated this item")
+        
+        self.item_rated_by[request.item_id].add(request.buyer_address)
+        
+        if request.item_id not in self.item_ratings:
+            self.item_ratings[request.item_id] = (0, 0)  # Initialize rating
+        
+        total_rating, num_ratings = self.item_ratings[request.item_id]
+        total_rating += request.rating
+        num_ratings += 1
+        self.item_ratings[request.item_id] = (total_rating, num_ratings)
+
+        # Update the item rating in the items dictionary
+        item = self.items[request.item_id]
+        item.rating = total_rating / num_ratings
+
         print(f"\n{request.buyer_address} rated item {request.item_id} with {request.rating} stars.")
         return marketplace_pb2.Response(message="SUCCESS")
     
