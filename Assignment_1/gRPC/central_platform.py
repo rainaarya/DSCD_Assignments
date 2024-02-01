@@ -3,6 +3,7 @@ from concurrent import futures
 import marketplace_pb2
 import marketplace_pb2_grpc
 import queue
+import os
 
 class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
     def __init__(self):
@@ -130,7 +131,7 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
         return marketplace_pb2.Response(message="SUCCESS")
     
     def NotifyClient(self, request, context):
-        client_address = context.peer()
+        client_address = request.address
         #print(f"Client {client_address} connected to meeeee!!")
         self.notifications[client_address] = queue.Queue()
 
@@ -144,12 +145,19 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
 
 
 def serve():
-    # Start a gRPC server
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     marketplace_pb2_grpc.add_MarketplaceServiceServicer_to_server(MarketplaceService(), server)
     server.add_insecure_port('[::]:50051')
     server.start()
-    server.wait_for_termination()
+    print("Server started. Listening on '[::]:50051'")
+    try:
+        server.wait_for_termination()
+    except KeyboardInterrupt:
+        print("KeyboardInterrupt caught. Shutting down the server gracefully...")
+        server.stop(0)  # Gracefully stop the server
+        print("Server stopped.")
+        os._exit(0)  # Forcefully stop the Python interpreter
+
 
 if __name__ == '__main__':
     serve()

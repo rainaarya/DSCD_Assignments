@@ -28,6 +28,11 @@ message SellerRegistration {
   string uuid = 2;
 }
 
+//Message for address
+message Address {
+  string address = 1;
+}
+
 // Message for adding, updating, deleting, and displaying items
 message ItemManagement {
   string uuid = 1;
@@ -69,5 +74,5 @@ service MarketplaceService {
   rpc BuyItem(BuyerOperation) returns (Response);
   rpc AddToWishList(BuyerOperation) returns (Response);
   rpc RateItem(BuyerOperation) returns (Response);
-  rpc NotifyClient(Empty) returns (stream Notification);
+  rpc NotifyClient(Address) returns (stream Notification);
 }
