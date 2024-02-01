@@ -58,7 +58,11 @@ class SellerClient:
     def listen_for_notifications(self):
         try:
             for notification in self.stub.NotifyClient(marketplace_pb2.Address(address=self.address)):
+                print("\n")
+                print("=====" * 8)  # Print separator
                 print("NOTIFICATION RECEIVED:\n", notification.message)
+                print("=====" * 8)  # Print separator
+                print("\n")
         except grpc.RpcError as e:
             print(f"An error occurred: {e}")
 
@@ -69,17 +73,39 @@ if __name__ == "__main__":
     notification_thread.daemon = True  # Set the thread as a daemon
     notification_thread.start()
 
-    seller.register_seller()
-    seller.sell_item("Laptop", marketplace_pb2.ELECTRONICS, 10, "Latest model", 1200.0)
-    seller.sell_item("Mobile", marketplace_pb2.ELECTRONICS, 20, "Latest model", 800.0)
-    seller.display_seller_items()
-    # Add other operations as needed
+    while True:
+        print("\n=== Seller Menu ===")
+        print("1. Register as Seller")
+        print("2. Sell Item")
+        print("3. Update Item")
+        print("4. Delete Item")
+        print("5. Display Seller Items")
+        print("6. Exit")
+        choice = input("Enter your choice: ")
 
-    try:
-        while True:
-            # Keep the main thread running.
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("Program terminated by user")
-        # Here you can add any cleanup code if necessary before exiting.
-        # The daemon thread will be terminated when the main program exits.
+        if choice == '1':
+            seller.register_seller()
+        elif choice == '2':
+            name = input("Enter item name: ")
+            print("Choose category:\n1. ELECTRONICS\n2. FASHION\n3. OTHERS")
+            category_choice = input("Enter choice: ")
+            category = marketplace_pb2.ELECTRONICS if category_choice == '1' else marketplace_pb2.FASHION if category_choice == '2' else marketplace_pb2.OTHERS
+            quantity = int(input("Enter quantity: "))
+            description = input("Enter description: ")
+            price = float(input("Enter price: "))
+            seller.sell_item(name, category, quantity, description, price)
+        elif choice == '3':
+            item_id = int(input("Enter item ID to update: "))
+            new_quantity = int(input("Enter new quantity: "))
+            new_price = float(input("Enter new price: "))
+            seller.update_item(item_id, new_quantity, new_price)
+        elif choice == '4':
+            item_id = int(input("Enter item ID to delete: "))
+            seller.delete_item(item_id)
+        elif choice == '5':
+            seller.display_seller_items()
+        elif choice == '6':
+            print("Exiting...")
+            break
+        else:
+            print("Invalid choice. Please choose again.")

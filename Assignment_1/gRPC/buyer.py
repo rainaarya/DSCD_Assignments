@@ -38,7 +38,11 @@ class BuyerClient:
     def listen_for_notifications(self):
         try:
             for notification in self.stub.NotifyClient(marketplace_pb2.Address(address=self.address)):
+                print("\n")
+                print("=====" * 8)  # Print separator
                 print("NOTIFICATION RECEIVED:\n", notification.message)
+                print("=====" * 8)  # Print separator
+                print("\n")
         except grpc.RpcError as e:
             print(f"An error occurred: {e}")
 
@@ -49,15 +53,35 @@ if __name__ == "__main__":
     notification_thread = threading.Thread(target=buyer.listen_for_notifications)
     notification_thread.daemon = True  # Set the thread as a daemon
     notification_thread.start()
-    
-    buyer.search_item("", marketplace_pb2.ANY)
-    buyer.buy_item(1, 2)
-    # Add other operations as needed
-    try:
-        while True:
-            # Keep the main thread running.
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("Program terminated by user")
-        # Here you can add any cleanup code if necessary before exiting.
-        # The daemon thread will be terminated when the main program exits.
+
+    while True:
+        print("\n=== Buyer Menu ===")
+        print("1. Search for Item")
+        print("2. Buy Item")
+        print("3. Add Item to Wishlist")
+        print("4. Rate Item")
+        print("5. Exit")
+        choice = input("Enter your choice: ")
+
+        if choice == '1':
+            item_name = input("Enter item name (leave blank for all items): ")
+            print("Choose category:\n1. ELECTRONICS\n2. FASHION\n3. OTHERS\n4. ANY")
+            category_choice = input("Enter choice: ")
+            category = marketplace_pb2.ELECTRONICS if category_choice == '1' else marketplace_pb2.FASHION if category_choice == '2' else marketplace_pb2.OTHERS if category_choice == '3' else marketplace_pb2.ANY
+            buyer.search_item(item_name, category)
+        elif choice == '2':
+            item_id = int(input("Enter item ID to buy: "))
+            quantity = int(input("Enter quantity: "))
+            buyer.buy_item(item_id, quantity)
+        elif choice == '3':
+            item_id = int(input("Enter item ID to add to wishlist: "))
+            buyer.add_to_wishlist(item_id)
+        elif choice == '4':
+            item_id = int(input("Enter item ID to rate: "))
+            rating = int(input("Enter rating (1-5): "))
+            buyer.rate_item(item_id, rating)
+        elif choice == '5':
+            print("Exiting...")
+            break
+        else:
+            print("Invalid choice. Please choose again.")

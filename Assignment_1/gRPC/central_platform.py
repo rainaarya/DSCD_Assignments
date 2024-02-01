@@ -19,7 +19,7 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
         if request.address in self.sellers:
             return marketplace_pb2.Response(message="FAIL")
         self.sellers[request.address] = request.uuid
-        print(f"Seller join request from {request.address}, uuid = {request.uuid}")
+        print(f"\nSeller join request from {request.address}, uuid = {request.uuid}")
         return marketplace_pb2.Response(message="SUCCESS")
 
     def SellItem(self, request, context):
@@ -28,7 +28,7 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
         item.id = self.item_id_counter
         self.items[self.item_id_counter] = item
         self.item_id_counter += 1
-        print(f"Sell Item request from {request.uuid}")
+        print(f"\nSell Item request from {request.uuid}")
         return marketplace_pb2.Response(message=f"SUCCESS, Item ID: {item.id}")
 
     def UpdateItem(self, request, context):
@@ -43,15 +43,14 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
         # Other fields like name, description, etc., can also be updated if needed
 
         # Notify all buyers who have wish-listed this item
-        notification = marketplace_pb2.Notification(
-            item=self.items[request.item.id],
-            message=f"Item {request.item.id} has been updated."
-        )
-        for buyer_address in self.wishlists.get(request.item.id, []):
-            if buyer_address in self.notifications:
-                self.notifications[buyer_address].put(notification) 
+        notification_message = f"The Following Item has been updated:\n\nItem ID: {item.id}, Price: ${item.price}, Name: {item.name}, Category: {marketplace_pb2.Category.Name(item.category)}\nDescription: {item.description}.\nQuantity Remaining: {item.quantity}\nRating: {item.rating}/5 | Seller: {item.seller_address}\n"
+        for buyer_address, wishlist in self.wishlists.items():  # Iterate through all wishlists
+            if item.id in wishlist:  # Check if the item is in the current wishlist
+                if buyer_address in self.notifications:  # Check if the buyer is subscribed to notifications
+                    notification = marketplace_pb2.Notification(item=item, message=notification_message)
+                    self.notifications[buyer_address].put(notification)  # Add notification to the buyer's queue
 
-        print(f"Update Item {item.id} request from {request.uuid}")
+        print(f"\nUpdate Item {item.id} request from {request.uuid}")
         return marketplace_pb2.Response(message="SUCCESS")
 
     def DeleteItem(self, request, context):
@@ -61,7 +60,7 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
             return marketplace_pb2.Response(message="FAIL: Item ID not found")
 
         del self.items[request.item.id]
-        print(f"Delete Item {request.item.id} request from {request.uuid}")
+        print(f"\nDelete Item {request.item.id} request from {request.uuid}")
         return marketplace_pb2.Response(message="SUCCESS")
 
     def DisplaySellerItems(self, request, context):
@@ -71,7 +70,7 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
         for item_id, item in self.items.items():
             if item.seller_address == request.address:
                 yield item
-        print(f"Display Items request from {request.address}")
+        print(f"\nDisplay Items request from {request.address}")
     
     # buyer stuff
     def SearchItem(self, request, context):
@@ -80,7 +79,7 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
             if (request.category == marketplace_pb2.Category.Value('ANY') or item.category == request.category) and \
             (request.item_name == "" or request.item_name.lower() in item.name.lower()):
                 yield item
-        print(f"Search request for Item name: {request.item_name}, Category: {category_enum}")
+        print(f"\nSearch request for Item name: {request.item_name}, Category: {category_enum}")
 
 
     def BuyItem(self, request, context):
@@ -101,7 +100,7 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
         if seller_address in self.notifications:
             self.notifications[seller_address].put(seller_notification)
 
-        print(f"Buy request {request.quantity} of item {request.item_id}, from {request.buyer_address}")
+        print(f"\nBuy request {request.quantity} of item {request.item_id}, from {request.buyer_address}")
         return marketplace_pb2.Response(message="SUCCESS")
     
     def AddToWishList(self, request, context):
@@ -112,7 +111,7 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
             self.wishlists[request.buyer_address] = set()
 
         self.wishlists[request.buyer_address].add(request.item_id)
-        print(f"Wishlist request of item {request.item_id}, from {request.buyer_address}")
+        print(f"\nWishlist request of item {request.item_id}, from {request.buyer_address}")
         return marketplace_pb2.Response(message="SUCCESS")
 
     def RateItem(self, request, context):
@@ -127,7 +126,7 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
         item.total_rating += request.rating
         item.num_ratings += 1
         item.rating = item.total_rating / item.num_ratings
-        print(f"{request.buyer_address} rated item {request.item_id} with {request.rating} stars.")
+        print(f"\n{request.buyer_address} rated item {request.item_id} with {request.rating} stars.")
         return marketplace_pb2.Response(message="SUCCESS")
     
     def NotifyClient(self, request, context):
