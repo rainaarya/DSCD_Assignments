@@ -79,7 +79,7 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
         # Other fields like name, description, etc., can also be updated if needed
 
         # Notify all buyers who have wish-listed this item
-        notification_message = f"The Following Item has been updated:\n\nItem ID: {item.id}, Price: ${item.price}, Name: {item.name}, Category: {marketplace_pb2.Category.Name(item.category)}\nDescription: {item.description}.\nQuantity Remaining: {item.quantity}\nRating: {item.rating}/5 | Seller: {item.seller_address}\n"
+        notification_message = f"The Following Item has been updated:\n\nItem ID: {item.id}, Price: ${item.price}, Name: {item.name}, Category: {marketplace_pb2.Category.Name(item.category)}\nDescription: {item.description}.\nQuantity Remaining: {item.quantity}\nRating: {'Unrated' if item.rating == -1 else f'{item.rating}/5'} | Seller: {item.seller_address}\n"
         for buyer_address, wishlist in self.wishlists.items():  # Iterate through all wishlists
             if item.id in wishlist:  # Check if the item is in the current wishlist
                 if buyer_address in self.notifications:  # Check if the buyer is subscribed to notifications
@@ -140,7 +140,7 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
         # Trigger notification to the seller
         seller_notification = marketplace_pb2.Notification(
             item=item,
-            message=f"Item {item.id} purchased by {ip_addr}"
+            message = f"Item {item.id} ({item.name}) purchased by {ip_addr}"
         )
         seller_address = item.seller_address
         if seller_address in self.notifications:
