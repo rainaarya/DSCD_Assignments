@@ -5,39 +5,45 @@ import threading
 import time
 
 class BuyerClient:
-    def __init__(self, server_address, buyer_address):
+    def __init__(self, server_address):
         self.channel = grpc.insecure_channel(server_address)
         self.stub = marketplace_pb2_grpc.MarketplaceServiceStub(self.channel)
-        self.address = buyer_address
+        #self.address = buyer_address
 
     def search_item(self, item_name, category):
         response = self.stub.SearchItem(
-            marketplace_pb2.BuyerOperation(buyer_address=self.address, item_name=item_name, category=category)
+            marketplace_pb2.BuyerOperation(item_name=item_name, category=category)
         )
         for item in response:
-            print(item)
+            rating = "Unrated" if item.rating == -1 else f"{item.rating} / 5"
+            print(f"-----\nItem ID: {item.id}, Price: ${item.price}, Name: {item.name}, Category: {marketplace_pb2.Category.Name(item.category)},\n"
+                f"Description: {item.description}.\n"
+                f"Quantity Remaining: {item.quantity}\n"
+                f"Seller: {item.seller_address}\n"
+                f"Rating: {rating}\n"
+                f"-----\n")
 
     def buy_item(self, item_id, quantity):
         response = self.stub.BuyItem(
-            marketplace_pb2.BuyerOperation(item_id=item_id, quantity=quantity, buyer_address=self.address)
+            marketplace_pb2.BuyerOperation(item_id=item_id, quantity=quantity)
         )
         print(response.message)
 
     def add_to_wishlist(self, item_id):
         response = self.stub.AddToWishList(
-            marketplace_pb2.BuyerOperation(item_id=item_id, buyer_address=self.address)
+            marketplace_pb2.BuyerOperation(item_id=item_id)
         )
         print(response.message)
 
     def rate_item(self, item_id, rating):
         response = self.stub.RateItem(
-            marketplace_pb2.BuyerOperation(item_id=item_id, rating=rating, buyer_address=self.address)
+            marketplace_pb2.BuyerOperation(item_id=item_id, rating=rating)
         )
         print(response.message)
     
     def listen_for_notifications(self):
         try:
-            for notification in self.stub.NotifyClient(marketplace_pb2.Address(address=self.address)):
+            for notification in self.stub.NotifyClient(marketplace_pb2.Empty()):
                 print("\n")
                 print("=====" * 8)  # Print separator
                 print("NOTIFICATION RECEIVED:\n", notification.message)
@@ -49,7 +55,7 @@ class BuyerClient:
 
 
 if __name__ == "__main__":
-    buyer = BuyerClient('localhost:50051', 'buyer_ip:buyer_port')
+    buyer = BuyerClient('127.0.0.1:50051')
     notification_thread = threading.Thread(target=buyer.listen_for_notifications)
     notification_thread.daemon = True  # Set the thread as a daemon
     notification_thread.start()

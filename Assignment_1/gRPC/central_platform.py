@@ -5,6 +5,20 @@ import marketplace_pb2_grpc
 import queue
 import os
 
+def extract_ip_port(peer_info):
+    if peer_info.startswith("ipv4:"):
+        # Strip 'ipv4:' prefix and split address and port
+        address, port = peer_info[5:].split(':')
+    elif peer_info.startswith("ipv6:"):
+        # Strip 'ipv6:' prefix and split address and port
+        # Assuming the address is wrapped in []
+        address_port = peer_info[5:]
+        address, port = address_port.split(']:')
+        address = address.replace('[', '')  # Remove the remaining [
+    else:
+        address, port = peer_info, 'unknown'
+    return address, port
+
 class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
     def __init__(self):
         # Initialize data structures for storing information
@@ -18,20 +32,31 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
 
     def RegisterSeller(self, request, context):
         # Register a new seller
-        if request.address in self.sellers:
+        
+        client_info = context.peer()  # This retrieves the client's address as seen by the server
+        address, port = extract_ip_port(client_info)
+        # address + port is the unique identifier for the seller
+        ip_addr = f"{address}:{port}"
+        
+        if ip_addr in self.sellers:
             return marketplace_pb2.Response(message="FAIL")
-        self.sellers[request.address] = request.uuid
-        print(f"\nSeller join request from {request.address}, uuid = {request.uuid}")
+        self.sellers[ip_addr] = request.uuid
+        print(f"\nSeller join request from {ip_addr}, uuid = {request.uuid}")
         return marketplace_pb2.Response(message="SUCCESS")
 
     def SellItem(self, request, context):
         if request.uuid not in self.sellers.values():
             return marketplace_pb2.Response(message="FAIL: Unrecognized Seller UUID")
+
+        client_info = context.peer()
+        address, port = extract_ip_port(client_info)
+        ip_addr = f"{address}:{port}"
         
         # Add a new item to the marketplace
         item = request.item
         item.id = self.item_id_counter
         item.rating = -1  # Initialize rating to -1 (no ratings yet)
+        item.seller_address = ip_addr
         self.items[self.item_id_counter] = item
         self.item_id_counter += 1
         print(f"\nSell Item request from {request.uuid}")
@@ -43,9 +68,14 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
         if request.item.id not in self.items:
             return marketplace_pb2.Response(message="FAIL: Item ID not found")
 
+        client_info = context.peer()
+        address, port = extract_ip_port(client_info)
+        ip_addr = f"{address}:{port}"
+
         item = self.items[request.item.id]
         item.quantity = request.item.quantity
         item.price = request.item.price
+        item.seller_address = ip_addr
         # Other fields like name, description, etc., can also be updated if needed
 
         # Notify all buyers who have wish-listed this item
@@ -71,12 +101,18 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
 
     def DisplaySellerItems(self, request, context):
         if request.uuid not in self.sellers.values():
+            print("FAIL: Unrecognized Seller UUID")
             return  # Stream closure
+        
+        client_info = context.peer()  # This retrieves the client's address as seen by the server
+        address, port = extract_ip_port(client_info)
+        # address + port is the unique identifier for the seller
+        ip_addr = f"{address}:{port}"
 
         for item_id, item in self.items.items():
-            if item.seller_address == request.address:
+            if item.seller_address == ip_addr:
                 yield item
-        print(f"\nDisplay Items request from {request.address}")
+        print(f"\nDisplay Items request from {ip_addr}")
     
     # buyer stuff
     def SearchItem(self, request, context):
@@ -96,28 +132,36 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
         if item.quantity < request.quantity:
             return marketplace_pb2.Response(message="FAIL: Not enough stock")
         
+        client_info = context.peer()
+        address, port = extract_ip_port(client_info)
+        ip_addr = f"{address}:{port}"
+        
         item.quantity -= request.quantity
         # Trigger notification to the seller
         seller_notification = marketplace_pb2.Notification(
             item=item,
-            message=f"Item {item.id} purchased by {request.buyer_address}"
+            message=f"Item {item.id} purchased by {ip_addr}"
         )
         seller_address = item.seller_address
         if seller_address in self.notifications:
             self.notifications[seller_address].put(seller_notification)
 
-        print(f"\nBuy request {request.quantity} of item {request.item_id}, from {request.buyer_address}")
+        print(f"\nBuy request {request.quantity} of item {request.item_id}, from {ip_addr}")
         return marketplace_pb2.Response(message="SUCCESS")
     
     def AddToWishList(self, request, context):
         if request.item_id not in self.items:
             return marketplace_pb2.Response(message="FAIL: Item ID not found")
+        
+        client_info = context.peer()
+        address, port = extract_ip_port(client_info)
+        ip_addr = f"{address}:{port}"
 
-        if request.buyer_address not in self.wishlists:
-            self.wishlists[request.buyer_address] = set()
+        if ip_addr not in self.wishlists:
+            self.wishlists[ip_addr] = set()
 
-        self.wishlists[request.buyer_address].add(request.item_id)
-        print(f"\nWishlist request of item {request.item_id}, from {request.buyer_address}")
+        self.wishlists[ip_addr].add(request.item_id)
+        print(f"\nWishlist request of item {request.item_id}, from {ip_addr}")
         return marketplace_pb2.Response(message="SUCCESS")
 
     def RateItem(self, request, context):
@@ -126,11 +170,15 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
 
         if request.item_id not in self.item_rated_by:
             self.item_rated_by[request.item_id] = set()
+
+        client_info = context.peer()
+        address, port = extract_ip_port(client_info)
+        ip_addr = f"{address}:{port}"
         
-        if request.buyer_address in self.item_rated_by[request.item_id]:
+        if ip_addr in self.item_rated_by[request.item_id]:
             return marketplace_pb2.Response(message="FAIL: Buyer has already rated this item")
         
-        self.item_rated_by[request.item_id].add(request.buyer_address)
+        self.item_rated_by[request.item_id].add(ip_addr)
         
         if request.item_id not in self.item_ratings:
             self.item_ratings[request.item_id] = (0, 0)  # Initialize rating
@@ -144,11 +192,15 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
         item = self.items[request.item_id]
         item.rating = total_rating / num_ratings
 
-        print(f"\n{request.buyer_address} rated item {request.item_id} with {request.rating} stars.")
+        print(f"\n{ip_addr} rated item {request.item_id} with {request.rating} stars.")
         return marketplace_pb2.Response(message="SUCCESS")
     
     def NotifyClient(self, request, context):
-        client_address = request.address
+        client_info = context.peer()  # This retrieves the client's address as seen by the server
+        address, port = extract_ip_port(client_info)
+        ip_addr = f"{address}:{port}"
+
+        client_address = ip_addr
         #print(f"Client {client_address} connected to meeeee!!")
         self.notifications[client_address] = queue.Queue()
 
@@ -164,9 +216,9 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
 def serve():
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     marketplace_pb2_grpc.add_MarketplaceServiceServicer_to_server(MarketplaceService(), server)
-    server.add_insecure_port('[::]:50051')
+    server.add_insecure_port('0.0.0.0:50051')  # Bind to IPv4
     server.start()
-    print("Server started. Listening on '[::]:50051'")
+    print("Server started, listening on '0.0.0.0:50051'")
     try:
         server.wait_for_termination()
     except KeyboardInterrupt:

@@ -3,18 +3,17 @@ import marketplace_pb2
 import marketplace_pb2_grpc
 import uuid
 import threading
-import time
 
 class SellerClient:
-    def __init__(self, server_address, buyer_address):
+    def __init__(self, server_address):
         self.channel = grpc.insecure_channel(server_address)
         self.stub = marketplace_pb2_grpc.MarketplaceServiceStub(self.channel)
         self.uuid = str(uuid.uuid1())
-        self.address = buyer_address
+        #self.address = buyer_address
 
     def register_seller(self):
         response = self.stub.RegisterSeller(
-            marketplace_pb2.SellerRegistration(address=self.address, uuid=self.uuid)
+            marketplace_pb2.SellerRegistration(uuid=self.uuid)
         )
         print(response.message)
 
@@ -24,8 +23,7 @@ class SellerClient:
             category=category, 
             quantity=quantity, 
             description=description, 
-            price=price, 
-            seller_address=self.address
+            price=price
         )
         response = self.stub.SellItem(
             marketplace_pb2.ItemManagement(uuid=self.uuid, item=item)
@@ -50,14 +48,20 @@ class SellerClient:
 
     def display_seller_items(self):
         response = self.stub.DisplaySellerItems(
-            marketplace_pb2.SellerRegistration(address=self.address, uuid=self.uuid)
+            marketplace_pb2.SellerRegistration(uuid=self.uuid)
         )
         for item in response:
-            print(item)
+            rating = "Unrated" if item.rating == -1 else f"{item.rating} / 5"
+            print(f"-----\nItem ID: {item.id}, Price: ${item.price}, Name: {item.name}, Category: {marketplace_pb2.Category.Name(item.category)},\n"
+                f"Description: {item.description}.\n"
+                f"Quantity Remaining: {item.quantity}\n"
+                f"Seller: {item.seller_address}\n"
+                f"Rating: {rating}\n"
+                f"-----\n")
     
     def listen_for_notifications(self):
         try:
-            for notification in self.stub.NotifyClient(marketplace_pb2.Address(address=self.address)):
+            for notification in self.stub.NotifyClient(marketplace_pb2.Empty()):
                 print("\n")
                 print("=====" * 8)  # Print separator
                 print("NOTIFICATION RECEIVED:\n", notification.message)
@@ -68,7 +72,7 @@ class SellerClient:
 
 
 if __name__ == "__main__":
-    seller = SellerClient('localhost:50051', 'seller_ip:seller_port')
+    seller = SellerClient('127.0.0.1:50051')
     notification_thread = threading.Thread(target=seller.listen_for_notifications)
     notification_thread.daemon = True  # Set the thread as a daemon
     notification_thread.start()

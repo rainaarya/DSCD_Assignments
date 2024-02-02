@@ -62,7 +62,7 @@ class MarketplaceServiceStub(object):
                 )
         self.NotifyClient = channel.unary_stream(
                 '/marketplace.MarketplaceService/NotifyClient',
-                request_serializer=marketplace__pb2.Address.SerializeToString,
+                request_serializer=marketplace__pb2.Empty.SerializeToString,
                 response_deserializer=marketplace__pb2.Notification.FromString,
                 )
 
@@ -181,7 +181,7 @@ def add_MarketplaceServiceServicer_to_server(servicer, server):
             ),
             'NotifyClient': grpc.unary_stream_rpc_method_handler(
                     servicer.NotifyClient,
-                    request_deserializer=marketplace__pb2.Address.FromString,
+                    request_deserializer=marketplace__pb2.Empty.FromString,
                     response_serializer=marketplace__pb2.Notification.SerializeToString,
             ),
     }
@@ -360,7 +360,7 @@ class MarketplaceService(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_stream(request, target, '/marketplace.MarketplaceService/NotifyClient',
-            marketplace__pb2.Address.SerializeToString,
+            marketplace__pb2.Empty.SerializeToString,
             marketplace__pb2.Notification.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
