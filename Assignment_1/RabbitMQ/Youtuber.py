@@ -14,17 +14,22 @@ channel.queue_declare(queue='youtuber_requests')
 youtuber = sys.argv[1]
 video = sys.argv[2]
 
-# Create a video upload request as JSON
-request = json.dumps({
-    'youtuber': youtuber,
-    'video': video
-})
+def publishVideo(youtuber, videoName):
+    # This function sends the video to the youtubeServer
+    # Create a video upload request as JSON
+    request = json.dumps({
+        'youtuber': youtuber,
+        'video': videoName
+    })
 
-# Publish the request to the youtuber requests queue
-channel.basic_publish(exchange='', routing_key='youtuber_requests', body=request)
+    # Publish the request to the youtuber requests queue
+    channel.basic_publish(exchange='', routing_key='youtuber_requests', body=request)
 
-# Print a message
-print(f"{youtuber} published {video}")
+    # Print a message
+    print(f"{youtuber} published {videoName}")
+
+# Call the publishVideo function with the arguments
+publishVideo(youtuber, video)
 
 # Close the connection
 connection.close()

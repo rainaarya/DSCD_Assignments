@@ -25,18 +25,28 @@ def consume_user_requests(ch, method, properties, body):
     user = request['user']
     action = request['action']
 
+    print(f"{user} logged in")
+
     # If the user is logging in
     if action == 'login':
+
+        print("In login")
         # Add the user to the users dictionary if not already present
         if user not in users:
             users[user] = []
         # Print a message
-        print(f"{user} logged in")
+        #print(f"{user} logged in")
         # Send any pending notifications to the user
         send_notifications(user)
     
     # If the user is subscribing or unsubscribing to a youtuber
     elif action in ['subscribe', 'unsubscribe']:
+
+        print("in subscribe/unsubscribe")
+        
+        if user not in users:
+            users[user] = []
+        
         # Get the youtuber name from the request
         youtuber = request['youtuber']
         # If the user is subscribing
@@ -98,6 +108,7 @@ def notify_users(youtuber, video):
     # Get the subscribers of the youtuber
     subscribers = subscriptions.get(youtuber, [])
 
+    print(f"Subscribers of {youtuber}: {subscribers}")
     # For each subscriber
     for user in subscribers:
         # Publish the notification to the notifications queue with the user as the routing key
