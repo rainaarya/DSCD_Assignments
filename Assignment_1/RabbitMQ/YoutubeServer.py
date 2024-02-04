@@ -97,24 +97,33 @@ def consume_youtuber_requests(ch, method, properties, body):
     # Acknowledge the message
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
+# def notify_users(youtuber, video):
+#     # This function sends notifications to all users who subscribe to the youtuber
+#     # Create a notification message as JSON
+#     notification = json.dumps({
+#         'youtuber': youtuber,
+#         'video': video
+#     })
+
+#     # Get the subscribers of the youtuber
+#     subscribers = subscriptions.get(youtuber, [])
+
+#     print(f"Subscribers of {youtuber}: {subscribers}")
+#     # For each subscriber
+#     for user in subscribers:
+#         # Publish the notification to the notifications queue with the user as the routing key
+#         channel.basic_publish(exchange='', routing_key='notifications', body=notification, properties=pika.BasicProperties(
+#             reply_to=user
+#         ))
+    
 def notify_users(youtuber, video):
-    # This function sends notifications to all users who subscribe to the youtuber
-    # Create a notification message as JSON
-    notification = json.dumps({
-        'youtuber': youtuber,
-        'video': video
-    })
-
-    # Get the subscribers of the youtuber
+    notification = json.dumps({'youtuber': youtuber, 'video': video})
     subscribers = subscriptions.get(youtuber, [])
-
-    print(f"Subscribers of {youtuber}: {subscribers}")
-    # For each subscriber
     for user in subscribers:
-        # Publish the notification to the notifications queue with the user as the routing key
-        channel.basic_publish(exchange='', routing_key='notifications', body=notification, properties=pika.BasicProperties(
-            reply_to=user
-        ))
+        user_queue = f"{user}_notifications"  # Name the queue after the user
+        channel.queue_declare(queue=user_queue)  # Ensure the queue exists
+        channel.basic_publish(exchange='', routing_key=user_queue, body=notification)
+
 
 def send_notifications(user):
     # This function sends any pending notifications to the user

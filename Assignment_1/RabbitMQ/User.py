@@ -38,15 +38,40 @@ def updateSubscription(user, action, youtuber):
     # Print a message
     print(f"{user} sent a {action} request")
 
+# def receiveNotifications(user):
+#     # This function receives any notifications already in the queue for the users subscriptions and starts receiving real-time notifications for videos uploaded while the user is logged in
+#     # Declare a callback queue for the user
+#     callback_queue = channel.queue_declare(queue='', exclusive=True).method.queue
+
+#     # Consume messages from the notifications queue with the user as the routing key
+#     channel.basic_consume(queue='notifications', on_message_callback=lambda ch, method, properties, body: print_notification(ch, method, properties, body, user), auto_ack=True)
+
+#     # Wait for messages
+#     print("Waiting for notifications...")
+#     channel.start_consuming()
+
+# def print_notification(ch, method, properties, body, user):
+#     # This function prints the notifications from the notifications queue
+#     # Parse the notification body as JSON
+#     notification = json.loads(body)
+
+#     # Get the youtuber name and video name from the notification
+#     youtuber = notification['youtuber']
+#     video = notification['video']
+
+#     # Print a message
+#     print(f"New Notification: {youtuber} uploaded {video}")
+    
+from functools import partial
+
 def receiveNotifications(user):
-    # This function receives any notifications already in the queue for the users subscriptions and starts receiving real-time notifications for videos uploaded while the user is logged in
-    # Declare a callback queue for the user
-    callback_queue = channel.queue_declare(queue='', exclusive=True).method.queue
+    user_queue = f"{user}_notifications"
+    channel.queue_declare(queue=user_queue)  # Ensure the queue exists
 
-    # Consume messages from the notifications queue with the user as the routing key
-    channel.basic_consume(queue='notifications', on_message_callback=lambda ch, method, properties, body: print_notification(ch, method, properties, body, user), auto_ack=True)
+    # Use a partial function to include the 'user' parameter in the callback
+    on_message_callback_with_user = partial(print_notification, user=user)
 
-    # Wait for messages
+    channel.basic_consume(queue=user_queue, on_message_callback=on_message_callback_with_user, auto_ack=True)
     print("Waiting for notifications...")
     channel.start_consuming()
 
@@ -61,6 +86,7 @@ def print_notification(ch, method, properties, body, user):
 
     # Print a message
     print(f"New Notification: {youtuber} uploaded {video}")
+
 
 # If the user is logging in
 if action is None:
