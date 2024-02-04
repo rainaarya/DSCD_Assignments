@@ -14,29 +14,31 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x11marketplace.proto\x12\x0bmarketplace\"\xa7\x01\n\x04Item\x12\n\n\x02id\x18\x01 \x01(\x05\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\'\n\x08\x63\x61tegory\x18\x03 \x01(\x0e\x32\x15.marketplace.Category\x12\x13\n\x0b\x64\x65scription\x18\x04 \x01(\t\x12\x10\n\x08quantity\x18\x05 \x01(\x05\x12\r\n\x05price\x18\x06 \x01(\x02\x12\x0e\n\x06rating\x18\x07 \x01(\x02\x12\x16\n\x0eseller_address\x18\x08 \x01(\t\"\"\n\x12SellerRegistration\x12\x0c\n\x04uuid\x18\x01 \x01(\t\"?\n\x0eItemManagement\x12\x0c\n\x04uuid\x18\x01 \x01(\t\x12\x1f\n\x04item\x18\x02 \x01(\x0b\x32\x11.marketplace.Item\"\x7f\n\x0e\x42uyerOperation\x12\x0f\n\x07item_id\x18\x01 \x01(\x05\x12\x10\n\x08quantity\x18\x02 \x01(\x05\x12\'\n\x08\x63\x61tegory\x18\x03 \x01(\x0e\x32\x15.marketplace.Category\x12\x0e\n\x06rating\x18\x04 \x01(\x05\x12\x11\n\titem_name\x18\x05 \x01(\t\"\x1b\n\x08Response\x12\x0f\n\x07message\x18\x01 \x01(\t\"@\n\x0cNotification\x12\x1f\n\x04item\x18\x01 \x01(\x0b\x32\x11.marketplace.Item\x12\x0f\n\x07message\x18\x02 \x01(\t\"\x07\n\x05\x45mpty*=\n\x08\x43\x61tegory\x12\x0f\n\x0b\x45LECTRONICS\x10\x00\x12\x0b\n\x07\x46\x41SHION\x10\x01\x12\n\n\x06OTHERS\x10\x02\x12\x07\n\x03\x41NY\x10\x03\x32\xb3\x05\n\x12MarketplaceService\x12H\n\x0eRegisterSeller\x12\x1f.marketplace.SellerRegistration\x1a\x15.marketplace.Response\x12>\n\x08SellItem\x12\x1b.marketplace.ItemManagement\x1a\x15.marketplace.Response\x12@\n\nUpdateItem\x12\x1b.marketplace.ItemManagement\x1a\x15.marketplace.Response\x12@\n\nDeleteItem\x12\x1b.marketplace.ItemManagement\x1a\x15.marketplace.Response\x12J\n\x12\x44isplaySellerItems\x12\x1f.marketplace.SellerRegistration\x1a\x11.marketplace.Item0\x01\x12>\n\nSearchItem\x12\x1b.marketplace.BuyerOperation\x1a\x11.marketplace.Item0\x01\x12=\n\x07\x42uyItem\x12\x1b.marketplace.BuyerOperation\x1a\x15.marketplace.Response\x12\x43\n\rAddToWishList\x12\x1b.marketplace.BuyerOperation\x1a\x15.marketplace.Response\x12>\n\x08RateItem\x12\x1b.marketplace.BuyerOperation\x1a\x15.marketplace.Response\x12?\n\x0cNotifyClient\x12\x12.marketplace.Empty\x1a\x19.marketplace.Notification0\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x11marketplace.proto\x12\x0bmarketplace\"\xa7\x01\n\x04Item\x12\n\n\x02id\x18\x01 \x01(\x05\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\'\n\x08\x63\x61tegory\x18\x03 \x01(\x0e\x32\x15.marketplace.Category\x12\x13\n\x0b\x64\x65scription\x18\x04 \x01(\t\x12\x10\n\x08quantity\x18\x05 \x01(\x05\x12\r\n\x05price\x18\x06 \x01(\x02\x12\x0e\n\x06rating\x18\x07 \x01(\x02\x12\x16\n\x0eseller_address\x18\x08 \x01(\t\"<\n\x12SellerRegistration\x12\x0c\n\x04uuid\x18\x01 \x01(\t\x12\x18\n\x10notificationPort\x18\x02 \x01(\x05\"?\n\x0eItemManagement\x12\x0c\n\x04uuid\x18\x01 \x01(\t\x12\x1f\n\x04item\x18\x02 \x01(\x0b\x32\x11.marketplace.Item\"\x99\x01\n\x0e\x42uyerOperation\x12\x0f\n\x07item_id\x18\x01 \x01(\x05\x12\x10\n\x08quantity\x18\x02 \x01(\x05\x12\'\n\x08\x63\x61tegory\x18\x03 \x01(\x0e\x32\x15.marketplace.Category\x12\x0e\n\x06rating\x18\x04 \x01(\x05\x12\x11\n\titem_name\x18\x05 \x01(\t\x12\x18\n\x10notificationPort\x18\x06 \x01(\x05\"\x1b\n\x08Response\x12\x0f\n\x07message\x18\x01 \x01(\t\"@\n\x0cNotification\x12\x1f\n\x04item\x18\x01 \x01(\x0b\x32\x11.marketplace.Item\x12\x0f\n\x07message\x18\x02 \x01(\t\"\x07\n\x05\x45mpty*=\n\x08\x43\x61tegory\x12\x0f\n\x0b\x45LECTRONICS\x10\x00\x12\x0b\n\x07\x46\x41SHION\x10\x01\x12\n\n\x06OTHERS\x10\x02\x12\x07\n\x03\x41NY\x10\x03\x32\xf2\x04\n\x12MarketplaceService\x12H\n\x0eRegisterSeller\x12\x1f.marketplace.SellerRegistration\x1a\x15.marketplace.Response\x12>\n\x08SellItem\x12\x1b.marketplace.ItemManagement\x1a\x15.marketplace.Response\x12@\n\nUpdateItem\x12\x1b.marketplace.ItemManagement\x1a\x15.marketplace.Response\x12@\n\nDeleteItem\x12\x1b.marketplace.ItemManagement\x1a\x15.marketplace.Response\x12J\n\x12\x44isplaySellerItems\x12\x1f.marketplace.SellerRegistration\x1a\x11.marketplace.Item0\x01\x12>\n\nSearchItem\x12\x1b.marketplace.BuyerOperation\x1a\x11.marketplace.Item0\x01\x12=\n\x07\x42uyItem\x12\x1b.marketplace.BuyerOperation\x1a\x15.marketplace.Response\x12\x43\n\rAddToWishList\x12\x1b.marketplace.BuyerOperation\x1a\x15.marketplace.Response\x12>\n\x08RateItem\x12\x1b.marketplace.BuyerOperation\x1a\x15.marketplace.Response2W\n\x13NotificationService\x12@\n\x0cNotifyClient\x12\x19.marketplace.Notification\x1a\x15.marketplace.Responseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'marketplace_pb2', _globals)
 if _descriptor._USE_C_DESCRIPTORS == False:
   DESCRIPTOR._options = None
-  _globals['_CATEGORY']._serialized_start=538
-  _globals['_CATEGORY']._serialized_end=599
+  _globals['_CATEGORY']._serialized_start=591
+  _globals['_CATEGORY']._serialized_end=652
   _globals['_ITEM']._serialized_start=35
   _globals['_ITEM']._serialized_end=202
   _globals['_SELLERREGISTRATION']._serialized_start=204
-  _globals['_SELLERREGISTRATION']._serialized_end=238
-  _globals['_ITEMMANAGEMENT']._serialized_start=240
-  _globals['_ITEMMANAGEMENT']._serialized_end=303
-  _globals['_BUYEROPERATION']._serialized_start=305
-  _globals['_BUYEROPERATION']._serialized_end=432
-  _globals['_RESPONSE']._serialized_start=434
-  _globals['_RESPONSE']._serialized_end=461
-  _globals['_NOTIFICATION']._serialized_start=463
-  _globals['_NOTIFICATION']._serialized_end=527
-  _globals['_EMPTY']._serialized_start=529
-  _globals['_EMPTY']._serialized_end=536
-  _globals['_MARKETPLACESERVICE']._serialized_start=602
-  _globals['_MARKETPLACESERVICE']._serialized_end=1293
+  _globals['_SELLERREGISTRATION']._serialized_end=264
+  _globals['_ITEMMANAGEMENT']._serialized_start=266
+  _globals['_ITEMMANAGEMENT']._serialized_end=329
+  _globals['_BUYEROPERATION']._serialized_start=332
+  _globals['_BUYEROPERATION']._serialized_end=485
+  _globals['_RESPONSE']._serialized_start=487
+  _globals['_RESPONSE']._serialized_end=514
+  _globals['_NOTIFICATION']._serialized_start=516
+  _globals['_NOTIFICATION']._serialized_end=580
+  _globals['_EMPTY']._serialized_start=582
+  _globals['_EMPTY']._serialized_end=589
+  _globals['_MARKETPLACESERVICE']._serialized_start=655
+  _globals['_MARKETPLACESERVICE']._serialized_end=1281
+  _globals['_NOTIFICATIONSERVICE']._serialized_start=1283
+  _globals['_NOTIFICATIONSERVICE']._serialized_end=1370
 # @@protoc_insertion_point(module_scope)

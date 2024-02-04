@@ -2,7 +2,6 @@ import grpc
 from concurrent import futures
 import marketplace_pb2
 import marketplace_pb2_grpc
-import queue
 import os
 
 def extract_ip_port(peer_info):
@@ -23,10 +22,12 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
     def __init__(self):
         # Initialize data structures for storing information
         self.sellers = {}  # Stores seller details
+        self.sellers_notificationIP = {}  # Stores seller notifications server IP
+        self.buyers_notificationIP = {}  # Stores buyer notifications server IP
         self.items = {}  # Stores item details
         self.item_id_counter = 1  # Unique item ID generator
         self.wishlists = {}  # Stores buyer wishlists
-        self.notifications = {}  # key: client address, value: queue of notifications
+        #self.notifications = {}  # key: client address, value: queue of notifications
         self.item_ratings = {}  # New: Store ratings for each item {item_id: (total_rating, num_ratings)}
         self.item_rated_by = {}  # New: Store which users rated each item {item_id: set([user_addresses])}
 
@@ -41,6 +42,8 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
         if ip_addr in self.sellers:
             return marketplace_pb2.Response(message="FAIL")
         self.sellers[ip_addr] = request.uuid
+        self.sellers_notificationIP[ip_addr] = ip_addr.split(":")[0] + ":" + str(request.notificationPort)
+
         print(f"\nSeller join request from {ip_addr}, uuid = {request.uuid}")
         return marketplace_pb2.Response(message="SUCCESS")
 
@@ -82,9 +85,8 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
         notification_message = f"The Following Item has been updated:\n\nItem ID: {item.id}, Price: ${item.price}, Name: {item.name}, Category: {marketplace_pb2.Category.Name(item.category)}\nDescription: {item.description}.\nQuantity Remaining: {item.quantity}\nRating: {'Unrated' if item.rating == -1 else f'{item.rating}/5'} | Seller: {item.seller_address}\n"
         for buyer_address, wishlist in self.wishlists.items():  # Iterate through all wishlists
             if item.id in wishlist:  # Check if the item is in the current wishlist
-                if buyer_address in self.notifications:  # Check if the buyer is subscribed to notifications
-                    notification = marketplace_pb2.Notification(item=item, message=notification_message)
-                    self.notifications[buyer_address].put(notification)  # Add notification to the buyer's queue
+                notification = marketplace_pb2.Notification(item=item, message=notification_message)
+                send_notification(self.buyers_notificationIP[buyer_address], notification)
 
         print(f"\nUpdate Item {item.id} request from {request.uuid}")
         return marketplace_pb2.Response(message="SUCCESS")
@@ -143,8 +145,7 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
             message = f"Item {item.id} ({item.name}) purchased by {ip_addr}"
         )
         seller_address = item.seller_address
-        if seller_address in self.notifications:
-            self.notifications[seller_address].put(seller_notification)
+        send_notification(self.sellers_notificationIP[seller_address], seller_notification)
 
         print(f"\nBuy request {request.quantity} of item {request.item_id}, from {ip_addr}")
         return marketplace_pb2.Response(message="SUCCESS")
@@ -159,6 +160,7 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
 
         if ip_addr not in self.wishlists:
             self.wishlists[ip_addr] = set()
+            self.buyers_notificationIP[ip_addr] = ip_addr.split(":")[0] + ":" + str(request.notificationPort)
 
         self.wishlists[ip_addr].add(request.item_id)
         print(f"\nWishlist request of item {request.item_id}, from {ip_addr}")
@@ -194,23 +196,16 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
 
         print(f"\n{ip_addr} rated item {request.item_id} with {request.rating} stars.")
         return marketplace_pb2.Response(message="SUCCESS")
-    
-    def NotifyClient(self, request, context):
-        client_info = context.peer()  # This retrieves the client's address as seen by the server
-        address, port = extract_ip_port(client_info)
-        ip_addr = f"{address}:{port}"
-
-        client_address = ip_addr
-        #print(f"Client {client_address} connected to meeeee!!")
-        self.notifications[client_address] = queue.Queue()
-
+            
+# Function to send notification
+def send_notification(client_address, notification):
+    with grpc.insecure_channel(client_address) as channel:
+        stub = marketplace_pb2_grpc.NotificationServiceStub(channel)
         try:
-            while True:
-                while not self.notifications[client_address].empty():
-                    notification = self.notifications[client_address].get()
-                    yield notification
+            response = stub.NotifyClient(notification)
+            print(f"Notification sent to {client_address}, response: {response.message}")
         except grpc.RpcError as e:
-            del self.notifications[client_address]
+            print(f"Failed to send notification to {client_address}, error: {e}")
 
 
 def serve():

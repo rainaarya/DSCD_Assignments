@@ -25,6 +25,7 @@ message Item {
 // Message for seller registration
 message SellerRegistration {
   string uuid = 1;
+  int32 notificationPort = 2;
 }
 
 // Message for adding, updating, deleting, and displaying items
@@ -40,6 +41,7 @@ message BuyerOperation {
   Category category = 3; // For search
   int32 rating = 4; // For rating
   string item_name = 5; // Added field for item name in search
+  int32 notificationPort = 6; // Added field for notification port
 }
 
 // Response message
@@ -67,5 +69,9 @@ service MarketplaceService {
   rpc BuyItem(BuyerOperation) returns (Response);
   rpc AddToWishList(BuyerOperation) returns (Response);
   rpc RateItem(BuyerOperation) returns (Response);
-  rpc NotifyClient(Empty) returns (stream Notification);
+  // rpc NotifyClient(Empty) returns (stream Notification);
+}
+
+service NotificationService {
+  rpc NotifyClient(Notification) returns (Response);
 }

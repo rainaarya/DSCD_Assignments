@@ -60,11 +60,6 @@ class MarketplaceServiceStub(object):
                 request_serializer=marketplace__pb2.BuyerOperation.SerializeToString,
                 response_deserializer=marketplace__pb2.Response.FromString,
                 )
-        self.NotifyClient = channel.unary_stream(
-                '/marketplace.MarketplaceService/NotifyClient',
-                request_serializer=marketplace__pb2.Empty.SerializeToString,
-                response_deserializer=marketplace__pb2.Notification.FromString,
-                )
 
 
 class MarketplaceServiceServicer(object):
@@ -120,13 +115,8 @@ class MarketplaceServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def RateItem(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def NotifyClient(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """rpc NotifyClient(Empty) returns (stream Notification);
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -178,11 +168,6 @@ def add_MarketplaceServiceServicer_to_server(servicer, server):
                     servicer.RateItem,
                     request_deserializer=marketplace__pb2.BuyerOperation.FromString,
                     response_serializer=marketplace__pb2.Response.SerializeToString,
-            ),
-            'NotifyClient': grpc.unary_stream_rpc_method_handler(
-                    servicer.NotifyClient,
-                    request_deserializer=marketplace__pb2.Empty.FromString,
-                    response_serializer=marketplace__pb2.Notification.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -348,6 +333,50 @@ class MarketplaceService(object):
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
+
+class NotificationServiceStub(object):
+    """Missing associated documentation comment in .proto file."""
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.NotifyClient = channel.unary_unary(
+                '/marketplace.NotificationService/NotifyClient',
+                request_serializer=marketplace__pb2.Notification.SerializeToString,
+                response_deserializer=marketplace__pb2.Response.FromString,
+                )
+
+
+class NotificationServiceServicer(object):
+    """Missing associated documentation comment in .proto file."""
+
+    def NotifyClient(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_NotificationServiceServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'NotifyClient': grpc.unary_unary_rpc_method_handler(
+                    servicer.NotifyClient,
+                    request_deserializer=marketplace__pb2.Notification.FromString,
+                    response_serializer=marketplace__pb2.Response.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'marketplace.NotificationService', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+
+
+ # This class is part of an EXPERIMENTAL API.
+class NotificationService(object):
+    """Missing associated documentation comment in .proto file."""
+
     @staticmethod
     def NotifyClient(request,
             target,
@@ -359,8 +388,8 @@ class MarketplaceService(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_stream(request, target, '/marketplace.MarketplaceService/NotifyClient',
-            marketplace__pb2.Empty.SerializeToString,
-            marketplace__pb2.Notification.FromString,
+        return grpc.experimental.unary_unary(request, target, '/marketplace.NotificationService/NotifyClient',
+            marketplace__pb2.Notification.SerializeToString,
+            marketplace__pb2.Response.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
