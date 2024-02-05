@@ -3,33 +3,30 @@ import pika
 import json
 import sys
 
-# Connect to RabbitMQ server
-connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-channel = connection.channel()
+class YoutuberClient:
+    def __init__(self, youtuber, video, host='127.0.0.1'):
+        self.youtuber = youtuber
+        self.video = video
+        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host))
+        self.channel = self.connection.channel()
+        self.channel.queue_declare(queue='youtuber_requests')
 
-# Declare queue for youtuber requests
-channel.queue_declare(queue='youtuber_requests')
+    def publishVideo(self):
+        request = json.dumps({
+            'youtuber': self.youtuber,
+            'video': self.video
+        })
 
-# Get the youtuber name and video name from the command line arguments
-youtuber = sys.argv[1]
-video = sys.argv[2]
+        self.channel.basic_publish(exchange='', routing_key='youtuber_requests', body=request)
+        print(f"SUCCESS: {self.youtuber} published {self.video}")
 
-def publishVideo(youtuber, videoName):
-    # This function sends the video to the youtubeServer
-    # Create a video upload request as JSON
-    request = json.dumps({
-        'youtuber': youtuber,
-        'video': videoName
-    })
+    def closeConnection(self):
+        self.connection.close()
 
-    # Publish the request to the youtuber requests queue
-    channel.basic_publish(exchange='', routing_key='youtuber_requests', body=request)
+if __name__ == "__main__":
+    youtuber = sys.argv[1]
+    video = ' '.join(sys.argv[2:])
 
-    # Print a message
-    print(f"{youtuber} published {videoName}")
-
-# Call the publishVideo function with the arguments
-publishVideo(youtuber, video)
-
-# Close the connection
-connection.close()
+    client = YoutuberClient(youtuber, video, '127.0.0.1')
+    client.publishVideo()
+    client.closeConnection()

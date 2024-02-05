@@ -2,102 +2,61 @@
 import pika
 import json
 import sys
-
-# Connect to RabbitMQ server
-connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-channel = connection.channel()
-
-# Declare queue for user requests
-channel.queue_declare(queue='user_requests')
-
-# Get the user name and optional action and youtuber name from the command line arguments
-user = sys.argv[1]
-action = sys.argv[2] if len(sys.argv) > 2 else None
-youtuber = sys.argv[3] if len(sys.argv) > 3 else None
-
-def updateSubscription(user, action, youtuber):
-    # This function sends the subscription/unsubscription request to the YouTubeServer
-    # Create a subscription/unsubscription request as JSON
-
-    if(action == None):
-        action = 'login'
-    elif(action == 's'):
-        action = 'subscribe'
-    elif(action == 'u'):
-        action = 'unsubscribe'
-
-    request = json.dumps({
-        'user': user,
-        'action': action,
-        'youtuber': youtuber
-    })
-
-    # Publish the request to the user requests queue
-    channel.basic_publish(exchange='', routing_key='user_requests', body=request)
-
-    # Print a message
-    print(f"{user} sent a {action} request")
-
-# def receiveNotifications(user):
-#     # This function receives any notifications already in the queue for the users subscriptions and starts receiving real-time notifications for videos uploaded while the user is logged in
-#     # Declare a callback queue for the user
-#     callback_queue = channel.queue_declare(queue='', exclusive=True).method.queue
-
-#     # Consume messages from the notifications queue with the user as the routing key
-#     channel.basic_consume(queue='notifications', on_message_callback=lambda ch, method, properties, body: print_notification(ch, method, properties, body, user), auto_ack=True)
-
-#     # Wait for messages
-#     print("Waiting for notifications...")
-#     channel.start_consuming()
-
-# def print_notification(ch, method, properties, body, user):
-#     # This function prints the notifications from the notifications queue
-#     # Parse the notification body as JSON
-#     notification = json.loads(body)
-
-#     # Get the youtuber name and video name from the notification
-#     youtuber = notification['youtuber']
-#     video = notification['video']
-
-#     # Print a message
-#     print(f"New Notification: {youtuber} uploaded {video}")
-    
 from functools import partial
 
-def receiveNotifications(user):
-    user_queue = f"{user}_notifications"
-    channel.queue_declare(queue=user_queue)  # Ensure the queue exists
+class UserClient:
+    def __init__(self, user, action=None, youtuber=None, host='127.0.0.1'):
+        self.user = user
+        self.action = action
+        self.youtuber = youtuber
+        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host))
+        self.channel = self.connection.channel()
+        self.channel.queue_declare(queue='user_requests')
 
-    # Use a partial function to include the 'user' parameter in the callback
-    on_message_callback_with_user = partial(print_notification, user=user)
+    def updateSubscription(self):
+        if self.action is None:
+            self.action = 'login'
+        elif self.action == 's':
+            self.action = 'subscribe'
+        elif self.action == 'u':
+            self.action = 'unsubscribe'
 
-    channel.basic_consume(queue=user_queue, on_message_callback=on_message_callback_with_user, auto_ack=True)
-    print("Waiting for notifications...")
-    channel.start_consuming()
+        request = json.dumps({
+            'user': self.user,
+            'action': self.action,
+            'youtuber': self.youtuber
+        })
 
-def print_notification(ch, method, properties, body, user):
-    # This function prints the notifications from the notifications queue
-    # Parse the notification body as JSON
-    notification = json.loads(body)
+        self.channel.basic_publish(exchange='', routing_key='user_requests', body=request)
+        print(f"SUCCESS: {self.user} sent a {self.action} request")
 
-    # Get the youtuber name and video name from the notification
-    youtuber = notification['youtuber']
-    video = notification['video']
+    def receiveNotifications(self):
+        user_queue = f"{self.user}_notifications"
+        self.channel.queue_declare(queue=user_queue)
 
-    # Print a message
-    print(f"New Notification: {youtuber} uploaded {video}")
+        on_message_callback_with_user = partial(self.print_notification, user=self.user)
+        self.channel.basic_consume(queue=user_queue, on_message_callback=on_message_callback_with_user, auto_ack=True)
 
+        print("Waiting for notifications...")
+        self.channel.start_consuming()
 
-# If the user is logging in
-if action is None:
-    # Call the updateSubscription function with the login action
-    updateSubscription(user, 'login', None)
-    # Call the receiveNotifications function
-    receiveNotifications(user)
+    @staticmethod
+    def print_notification(ch, method, properties, body, user):
+        notification = json.loads(body)
+        youtuber = notification['youtuber']
+        video = notification['video']
+        print(f"New Notification: {youtuber} uploaded {video}")
 
-# If the user is subscribing or unsubscribing to a youtuber
-else:
-    # Call the updateSubscription function with the action and youtuber
-    updateSubscription(user, action, youtuber)
+if __name__ == "__main__":
+    try:
+        user = sys.argv[1]
+        action = sys.argv[2] if len(sys.argv) > 2 else None
+        youtuber = sys.argv[3] if len(sys.argv) > 3 else None
 
-    receiveNotifications(user)
+        client = UserClient(user, action, youtuber, '127.0.0.1')
+        client.updateSubscription()
+        client.receiveNotifications()
+    except KeyboardInterrupt:
+        print("\nInterrupted by user. Closing connection...")
+        client.connection.close()
+        sys.exit(0)
