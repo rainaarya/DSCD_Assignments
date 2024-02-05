@@ -93,7 +93,7 @@ if __name__ == "__main__":
     port = int(input("Enter the port for the notification server: "))
     notification_thread = threading.Thread(target=start_notification_server, args=(port,), daemon=True).start()
     time.sleep(0.01)  # Add a delay here
-    seller = SellerClient('127.0.0.1:50051', port)
+    seller = SellerClient('10.190.0.2:50051', port)
     
     while True:
         try:
