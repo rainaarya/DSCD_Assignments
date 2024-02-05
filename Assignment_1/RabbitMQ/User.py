@@ -9,7 +9,9 @@ class UserClient:
         self.user = user
         self.action = action
         self.youtuber = youtuber
-        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host))
+        credentials = pika.PlainCredentials('user', 'user')
+        parameters = pika.ConnectionParameters(host, credentials=credentials)
+        self.connection = pika.BlockingConnection(parameters)
         self.channel = self.connection.channel()
         self.channel.queue_declare(queue='user_requests')
 
@@ -53,7 +55,7 @@ if __name__ == "__main__":
         action = sys.argv[2] if len(sys.argv) > 2 else None
         youtuber = sys.argv[3] if len(sys.argv) > 3 else None
 
-        client = UserClient(user, action, youtuber, '127.0.0.1')
+        client = UserClient(user, action, youtuber, '10.190.0.2')
         client.updateSubscription()
         client.receiveNotifications()
     except KeyboardInterrupt:

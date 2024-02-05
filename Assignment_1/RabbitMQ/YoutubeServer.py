@@ -75,5 +75,5 @@ class YoutubeServer:
             self.connection.close()
 
 if __name__ == "__main__":
-    server = YoutubeServer('127.0.0.1')
+    server = YoutubeServer('0.0.0.0')
     server.start_server()

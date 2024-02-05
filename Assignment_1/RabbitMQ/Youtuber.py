@@ -7,7 +7,9 @@ class YoutuberClient:
     def __init__(self, youtuber, video, host='127.0.0.1'):
         self.youtuber = youtuber
         self.video = video
-        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host))
+        credentials = pika.PlainCredentials('user', 'user')
+        parameters = pika.ConnectionParameters(host, credentials=credentials)
+        self.connection = pika.BlockingConnection(parameters)
         self.channel = self.connection.channel()
         self.channel.queue_declare(queue='youtuber_requests')
 
@@ -27,6 +29,6 @@ if __name__ == "__main__":
     youtuber = sys.argv[1]
     video = ' '.join(sys.argv[2:])
 
-    client = YoutuberClient(youtuber, video, '127.0.0.1')
+    client = YoutuberClient(youtuber, video, '10.190.0.2')
     client.publishVideo()
     client.closeConnection()
