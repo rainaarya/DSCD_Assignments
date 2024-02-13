@@ -51,6 +51,10 @@ class UserClient:
 
 if __name__ == "__main__":
     try:
+        if len(sys.argv) < 2:
+            print("Usage: python User.py <user> [<action>] [<youtuber>]")
+            sys.exit(1)
+            
         user = sys.argv[1]
         action = sys.argv[2] if len(sys.argv) > 2 else None
         youtuber = sys.argv[3] if len(sys.argv) > 3 else None

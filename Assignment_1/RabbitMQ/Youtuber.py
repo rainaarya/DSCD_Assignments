@@ -26,6 +26,10 @@ class YoutuberClient:
         self.connection.close()
 
 if __name__ == "__main__":
+    if len(sys.argv) < 3:
+        print("Usage: python Youtuber.py <youtuber> <video>")
+        sys.exit(1)
+
     youtuber = sys.argv[1]
     video = ' '.join(sys.argv[2:])
 
