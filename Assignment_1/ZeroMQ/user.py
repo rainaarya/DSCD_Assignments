@@ -1,5 +1,6 @@
 import zmq
 import uuid
+import sys
 
 # Generate a unique ID for the user at instance creation
 user_uuid = str(uuid.uuid1())
@@ -17,11 +18,11 @@ def send_group_request(action, group_ip_port):
     response = socket.recv_json()
     print(response['response'])
 
-def get_group_list():
+def get_group_list(server_address):
     action = 'get_group_list'
     context = zmq.Context()
     socket = context.socket(zmq.REQ)
-    socket.connect("tcp://localhost:5555")  # Connect to the message server.
+    socket.connect(f"tcp://{server_address}")  # Connect to the message server.
 
     message = {
         'action': action,
@@ -78,6 +79,11 @@ def read_large_text_from_terminal():
 
 
 if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: python3 user.py <main_server_address>")
+        sys.exit(1)
+    server_address = sys.argv[1]  # Server address
+
     commands = {
         "join_group": ("Join a group", "IP:PORT"),
         "leave_group": ("Leave a group", "IP:PORT"),
@@ -108,7 +114,7 @@ if __name__ == "__main__":
             send_group_request("leaveGroup", group_ip_port)
             
         elif command == "get_group_list":
-            get_group_list()
+            get_group_list(server_address)
             
         elif command == "get_messages" and group_ip_port:
             get_messages(group_ip_port, timestamp)

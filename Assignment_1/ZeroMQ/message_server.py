@@ -18,7 +18,7 @@ def main():
                 if action == 'register':
                     group_name = message['group_name']
                     ip_port = message['ip_port']
-                    print(f"JOIN REQUEST FROM LOCALHOST:{ip_port}")
+                    print(f"JOIN REQUEST FROM {ip_port}")
                     groups[ip_port] = group_name
                     response = "SUCCESS"
                     socket.send_string(response)
@@ -42,5 +42,5 @@ def main():
         print("Server shut down.")
 
 if __name__ == "__main__":
-    print("Starting message server...")
+    print("Starting message server on port 5555...")
     main()

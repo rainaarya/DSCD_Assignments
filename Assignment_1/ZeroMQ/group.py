@@ -93,11 +93,11 @@ def handle_user_requests(socket):
         socket.close()
 
 
-def register_group(group_name, ip_port):
+def register_group(group_name, ip_port, server_address):
     global running, USERTELE
     context = zmq.Context()
     socket = context.socket(zmq.REQ)
-    socket.connect("tcp://localhost:5555")
+    socket.connect(f"tcp://{server_address}")  # Connect to the message server
 
     message = {
         'action': 'register',
@@ -118,12 +118,13 @@ def register_group(group_name, ip_port):
         return context, user_socket, thread  # Return these so they can be managed outside
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Usage: python group.py <group_name> <ip_port>")
+    if len(sys.argv) < 4:
+        print("Usage: python3 group.py <group_name> <ip_port_of_group> <main_server_address>")
         sys.exit(1)
     group_name = sys.argv[1]
     ip_port = sys.argv[2]  # Group's own IP and Port
-    context, user_socket, thread = register_group(group_name, ip_port)
+    server_address = sys.argv[3]  # Server address
+    context, user_socket, thread = register_group(group_name, ip_port, server_address)
 
     try:
         while True:
