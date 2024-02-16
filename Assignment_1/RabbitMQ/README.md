@@ -77,7 +77,7 @@ The main block of the file takes the user, action, and youtuber arguments from t
      3.3 Run the User service to log in and receive notifications
           `python User.py username`
 
-   Note: Steps 2 and 3 can be done in any order
+Note: Steps 2 and 3 can be done in any order but make sure that you subscribe to a youtuber that exists
 
 
 Note: Replace any placeholder paths, IP addresses, or ports with actual values used in your environment. This readme assumes that the YoutubeService.py, User.py, and Youtuber.py scripts are located in the same directory and are run from the command line.
