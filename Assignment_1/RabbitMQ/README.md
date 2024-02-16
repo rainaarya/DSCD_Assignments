@@ -52,3 +52,30 @@ Before running the application, ensure you have Python and pip installed. Then, 
 `publishVideo(self)`: Publishes a JSON object with the youtuber and video fields to the youtuber_requests queue and prints a success message.
 `closeConnection(self)`: Closes the connection to the message broker.
 The main block of the file takes the youtuber and video arguments from the command line and creates an instance of the YoutuberClient class. It then calls the publishVideo and closeConnection methods.
+
+## User.py
+
+`__init__(self, user, action=None, youtuber=None, host='127.0.0.1')`: Initializes the user, action, youtuber, connection, channel, and queue for the class.
+`updateSubscription(self)`: Sends a JSON object with the user, action, and youtuber fields to the user_requests queue and prints a success message. The action can be login, subscribe, or unsubscribe.
+`receiveNotifications(self)`: Receives notifications from the user-specific queue and prints them to the console.
+`print_notification(ch, method, properties, body, user)`: A static method that parses the notification body as a JSON object and extracts the youtuber and video fields. It prints the notification message to the console.
+The main block of the file takes the user, action, and youtuber arguments from the command line and creates an instance of the UserClient class. It then calls the updateSubscription and receiveNotifications methods. It also handles the keyboard interrupt and closes the connection.
+
+## Running The Application
+
+1. Start the YoutubeService
+   `python YoutubeService.py`
+2. Run the Youtuber service to publish a video (in a new terminal window)
+ `python Youtuber.py TomScott After ten years, it's time to stop weekly videos.`
+3. Run the User service to just log in, or unsubscribe or subscribe a youtuber
+   Run the User service to log in, subscribe to a YouTuber, and receive notifications
+    `python User.py username s TomScott`
+
+  Run the User service to log in, unsubscribe to a YouTuber, and receive notifications
+    `python User.py username u TomScott`
+
+  Run the User service to log in and receive notifications
+    `python User.py username`
+
+
+Note: Replace any placeholder paths, IP addresses, or ports with actual values used in your environment. This readme assumes that the YoutubeService.py, User.py, and Youtuber.py scripts are located in the same directory and are run from the command line.
