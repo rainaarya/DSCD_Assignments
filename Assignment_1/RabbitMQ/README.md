@@ -68,14 +68,16 @@ The main block of the file takes the user, action, and youtuber arguments from t
 2. Run the Youtuber service to publish a video (in a new terminal window)
     `python Youtuber.py TomScott After ten years, it's time to stop weekly videos.`
 3. Run the User service to just log in, or unsubscribe or subscribe a youtuber
-   3.1 Run the User service to log in, subscribe to a YouTuber, and receive notifications
-       `python User.py username s TomScott`
+      3.1 Run the User service to log in, subscribe to a YouTuber, and receive notifications
+          `python User.py username s TomScott`
 
-  3.2 Run the User service to log in, unsubscribe to a YouTuber, and receive notifications
-       `python User.py username u TomScott`
+     3.2 Run the User service to log in, unsubscribe to a YouTuber, and receive notifications
+          `python User.py username u TomScott`
 
-  3.3 Run the User service to log in and receive notifications
-       `python User.py username`
+     3.3 Run the User service to log in and receive notifications
+          `python User.py username`
+
+   Note: Steps 2 and 3 can be done in any order
 
 
 Note: Replace any placeholder paths, IP addresses, or ports with actual values used in your environment. This readme assumes that the YoutubeService.py, User.py, and Youtuber.py scripts are located in the same directory and are run from the command line.
