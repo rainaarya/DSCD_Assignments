@@ -142,7 +142,7 @@ class MarketplaceService(marketplace_pb2_grpc.MarketplaceServiceServicer):
         # Trigger notification to the seller
         seller_notification = marketplace_pb2.Notification(
             item=item,
-            message = f"Item {item.id} ({item.name}) purchased by {ip_addr}"
+            message = f"Item {item.id} ({item.name}) purchased by {ip_addr}. Quantity left: {item.quantity}"
         )
         seller_address = item.seller_address
         send_notification(self.sellers_notificationIP[seller_address], seller_notification)
