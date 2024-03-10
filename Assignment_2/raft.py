@@ -161,6 +161,7 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
         self.acked_length = {}
         self.cancel_heartbeat_timer()
         self.cancel_lease_timer()
+        self.cancel_election_timer()
         self.start_election_timer()
 
     def append_no_op_entry(self):
@@ -176,7 +177,7 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
             if node_id != self.node_id:
                 self.replicate_log(node_id)
 
-        #self.start_heartbeat_timer()
+        self.start_heartbeat_timer()
 
     def replicate_log(self, follower_id):
         with grpc.insecure_channel(self.node_addresses[follower_id]) as channel:
@@ -217,7 +218,7 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
                 entry = self.log[i]
                 if entry.operation == "SET":
                     self.data_store[entry.key] = entry.value
-                    print(f"Node {self.node_id} (leader) committed the entry {entry['operation']} {entry['key']} {entry['value']} to the state machine.")
+                    print(f"Node {self.node_id} (leader) committed the entry {entry.operation} {entry.key} {entry.value} to the state machine.")
             self.commit_length = max(ready)
             self.save_state()
 
