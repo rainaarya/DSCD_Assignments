@@ -182,7 +182,7 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
     def replicate_log(self, follower_id):
         with grpc.insecure_channel(self.node_addresses[follower_id]) as channel:
             stub = raft_pb2_grpc.RaftStub(channel)
-            prefix_len = self.sent_length[follower_id]
+            prefix_len = self.sent_length.get(follower_id, 0)  # Use get() with a default value of 0
             suffix = self.log[prefix_len:]
             prefix_term = 0
             if prefix_len > 0:
@@ -203,7 +203,7 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
                     self.acked_length[follower_id] = prefix_len + len(suffix)
                     self.commit_log_entries()
                 else:
-                    self.sent_length[follower_id] = max(0, self.sent_length[follower_id] - 1)
+                    self.sent_length[follower_id] = max(0, self.sent_length.get(follower_id, 0) - 1)
                     self.replicate_log(follower_id)
             except grpc.RpcError as e:
                 print(f"Error occurred while sending RPC to Node {follower_id}.")
@@ -315,17 +315,28 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
                 key = parts[1]
                 value = self.data_store.get(key, "")
                 return raft_pb2.ServeClientReply(Data=value, LeaderID=str(self.node_id), Success=True)
+            
             elif parts[0] == "SET":
                 key = parts[1]
                 value = parts[2]
                 self.log.append(raft_pb2.LogEntry(operation="SET", key=key, value=value, term=self.current_term))
                 self.save_state()
-                self.replicate_log(self.node_id)
-                self.commit_log_entries()
+                # for node_id in self.node_addresses:
+                #     if node_id != self.node_id:
+                #         self.replicate_log(node_id)
+                # self.commit_log_entries()
+
+                # TODO
+                """ 
+                1. handle the case when the leader should respond success to the client only after the entry has been committed on the leader.
+                2. log and metadata retireval when the node is started again (i think only logs are retrieved and not data_store, so thats why right now nothing is retirved if we do a get request?)     
+                3. check if lease time stuff is working properly (assignment test case no. 4)       
+                """
+                
                 return raft_pb2.ServeClientReply(Data="", LeaderID=str(self.node_id), Success=True)
         else:
             return raft_pb2.ServeClientReply(Data="", LeaderID=str(self.current_leader), Success=False)
-
+   
 def serve(node_id, node_addresses):
     node = RaftNode(node_id, node_addresses)
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
@@ -348,7 +359,9 @@ def main():
     node_addresses = {
     0: "localhost:50050",
     1: "localhost:50051",
-    2: "localhost:50052"
+    2: "localhost:50052",
+    3: "localhost:50053",
+    4: "localhost:50054",
     }
     serve(node_id, node_addresses)
 
