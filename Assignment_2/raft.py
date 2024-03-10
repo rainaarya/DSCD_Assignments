@@ -41,6 +41,11 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
 
     def load_state(self):
         try:
+            with open(f"logs_node_{self.node_id}/metadata.txt", "r") as f:
+                self.commit_length = int(f.readline().strip())
+                self.current_term = int(f.readline().strip())
+                self.voted_for = f.readline().strip() or None
+
             with open(f"logs_node_{self.node_id}/logs.txt", "r") as f:
                 lines = f.readlines()
                 for line in lines:
@@ -53,10 +58,9 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
                         value = parts[2]
                         term = int(parts[3])
                         self.log.append(raft_pb2.LogEntry(operation="SET", key=key, value=value, term=term))
-            with open(f"logs_node_{self.node_id}/metadata.txt", "r") as f:
-                self.commit_length = int(f.readline().strip())
-                self.current_term = int(f.readline().strip())
-                self.voted_for = f.readline().strip() or None
+                        if len(self.log) <= self.commit_length:
+                            self.data_store[key] = value
+            
         except FileNotFoundError:
             pass
 
@@ -319,21 +323,19 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
             elif parts[0] == "SET":
                 key = parts[1]
                 value = parts[2]
-                self.log.append(raft_pb2.LogEntry(operation="SET", key=key, value=value, term=self.current_term))
+                log_entry = raft_pb2.LogEntry(operation="SET", key=key, value=value, term=self.current_term)
+                self.log.append(log_entry)
                 self.save_state()
-                # for node_id in self.node_addresses:
-                #     if node_id != self.node_id:
-                #         self.replicate_log(node_id)
-                # self.commit_log_entries()
 
-                # TODO
-                """ 
-                1. handle the case when the leader should respond success to the client only after the entry has been committed on the leader.
-                2. log and metadata retireval when the node is started again (i think only logs are retrieved and not data_store, so thats why right now nothing is retirved if we do a get request?)     
-                3. check if lease time stuff is working properly (assignment test case no. 4)       
-                """
-                
-                return raft_pb2.ServeClientReply(Data="", LeaderID=str(self.node_id), Success=True)
+                # Wait for the entry to be committed
+                while self.commit_length < len(self.log):
+                    time.sleep(0.1)  # Adjust the sleep duration as needed
+
+                # Check if the committed entry matches the appended entry
+                if self.log[self.commit_length - 1] == log_entry:
+                    return raft_pb2.ServeClientReply(Data="", LeaderID=str(self.node_id), Success=True)
+                else:
+                    return raft_pb2.ServeClientReply(Data="", LeaderID=str(self.node_id), Success=False)
         else:
             return raft_pb2.ServeClientReply(Data="", LeaderID=str(self.current_leader), Success=False)
    
@@ -367,3 +369,11 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# TODO
+""" 
+1. (partially done, testing needed) handle the case when the leader should respond success to the client only after the entry has been committed on the leader.
+2. (done) log and metadata retireval when the node is started again (i think only logs are retrieved and not data_store, so thats why right now nothing is retrived if we do a get request?)     
+3. check if lease time stuff is working properly (assignment test case no. 4)       
+4. When print(f"Error occurred while sending RPC to Node {node_id}.") [at three places in the code] happens, it takes extra time in the heartbeat, and the heartbeat doesnt go to all nodes simultaniously and via non blocking calls. Need to do such that RPC is sent simultaniously to all nodes instead of using a for loop.
+"""
