@@ -113,28 +113,43 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
             last_term = self.log[-1].term
         self.save_state()
 
+        threads = []
         for node_id, node_address in self.node_addresses.items():
             if node_id != self.node_id:
-                with grpc.insecure_channel(node_address) as channel:
-                    stub = raft_pb2_grpc.RaftStub(channel)
-                    request = raft_pb2.RequestVoteArgs(
-                        term=self.current_term,
-                        candidate_id=self.node_id,
-                        last_log_index=len(self.log),
-                        last_log_term=last_term
-                    )
-                    try:
-                        response = stub.RequestVote(request, timeout=1)
-                        if response.vote_granted:
-                            self.votes_received.add(node_id)
-                            self.old_leader_lease_timeout = max(self.old_leader_lease_timeout, response.old_leader_lease_timeout)
-                    except grpc.RpcError as e:
-                        print(f"Error occurred while sending RPC to Node {node_id}.")
+                thread = self.request_vote_async(node_id, last_term)
+                threads.append(thread)
+
+        # Wait for all threads to complete
+        # for thread in threads:
+        #     thread.join()
+        time.sleep(0.1)
 
         if len(self.votes_received) >= (len(self.node_addresses) // 2) + 1:
             self.become_leader()
         else:
             self.start_election_timer()
+    
+    def request_vote_async(self, node_id, last_term):
+        def request_vote_task():
+            with grpc.insecure_channel(self.node_addresses[node_id]) as channel:
+                stub = raft_pb2_grpc.RaftStub(channel)
+                request = raft_pb2.RequestVoteArgs(
+                    term=self.current_term,
+                    candidate_id=self.node_id,
+                    last_log_index=len(self.log),
+                    last_log_term=last_term
+                )
+                try:
+                    response = stub.RequestVote(request, timeout=1)
+                    if response.vote_granted:
+                        self.votes_received.add(node_id)
+                        self.old_leader_lease_timeout = max(self.old_leader_lease_timeout, response.old_leader_lease_timeout)
+                except grpc.RpcError as e:
+                    print(f"Error occurred while sending RPC to Node {node_id}.")
+
+        thread = threading.Thread(target=request_vote_task)
+        thread.start()
+        return thread
 
     def become_leader(self):
         print(f"Node {self.node_id} became the leader for term {self.current_term}.")
@@ -177,40 +192,50 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
         self.lease_timer.cancel()
         self.start_lease_timer()
 
+        threads = []
         for node_id, node_address in self.node_addresses.items():
             if node_id != self.node_id:
-                self.replicate_log(node_id)
+                thread = self.replicate_log_async(node_id)
+                threads.append(thread)
+        # Wait for all threads to complete
+        # for thread in threads:
+        #     thread.join()
 
         self.start_heartbeat_timer()
 
-    def replicate_log(self, follower_id):
-        with grpc.insecure_channel(self.node_addresses[follower_id]) as channel:
-            stub = raft_pb2_grpc.RaftStub(channel)
-            prefix_len = self.sent_length.get(follower_id, 0)  # Use get() with a default value of 0
-            suffix = self.log[prefix_len:]
-            prefix_term = 0
-            if prefix_len > 0:
-                prefix_term = self.log[prefix_len - 1].term
-            request = raft_pb2.AppendEntriesArgs(
-                term=self.current_term,
-                leader_id=self.node_id,
-                prev_log_index=prefix_len,
-                prev_log_term=prefix_term,
-                entries=suffix,
-                leader_commit=self.commit_length,
-                lease_duration=LEASE_DURATION
-            )
-            try:
-                response = stub.AppendEntries(request, timeout=1)
-                if response.success:
-                    self.sent_length[follower_id] = prefix_len + len(suffix)
-                    self.acked_length[follower_id] = prefix_len + len(suffix)
-                    self.commit_log_entries()
-                else:
-                    self.sent_length[follower_id] = max(0, self.sent_length.get(follower_id, 0) - 1)
-                    self.replicate_log(follower_id)
-            except grpc.RpcError as e:
-                print(f"Error occurred while sending RPC to Node {follower_id}.")
+    def replicate_log_async(self, follower_id):
+        def replicate_log_task():
+            with grpc.insecure_channel(self.node_addresses[follower_id]) as channel:
+                stub = raft_pb2_grpc.RaftStub(channel)
+                prefix_len = self.sent_length.get(follower_id, 0)
+                suffix = self.log[prefix_len:]
+                prefix_term = 0
+                if prefix_len > 0:
+                    prefix_term = self.log[prefix_len - 1].term
+                request = raft_pb2.AppendEntriesArgs(
+                    term=self.current_term,
+                    leader_id=self.node_id,
+                    prev_log_index=prefix_len,
+                    prev_log_term=prefix_term,
+                    entries=suffix,
+                    leader_commit=self.commit_length,
+                    lease_duration=LEASE_DURATION
+                )
+                try:
+                    response = stub.AppendEntries(request, timeout=1)
+                    if response.success:
+                        self.sent_length[follower_id] = prefix_len + len(suffix)
+                        self.acked_length[follower_id] = prefix_len + len(suffix)
+                        self.commit_log_entries()
+                    else:
+                        self.sent_length[follower_id] = max(0, self.sent_length.get(follower_id, 0) - 1)
+                        self.replicate_log_async(follower_id)
+                except grpc.RpcError as e:
+                    print(f"Error occurred while sending RPC to Node {follower_id}.")
+
+        thread = threading.Thread(target=replicate_log_task)
+        thread.start()
+        return thread
 
     def commit_log_entries(self):
         min_acks = (len(self.node_addresses) // 2) + 1
@@ -375,5 +400,6 @@ if __name__ == "__main__":
 1. (partially done, testing needed) handle the case when the leader should respond success to the client only after the entry has been committed on the leader.
 2. (done) log and metadata retireval when the node is started again (i think only logs are retrieved and not data_store, so thats why right now nothing is retrived if we do a get request?)     
 3. check if lease time stuff is working properly (assignment test case no. 4)       
-4. When print(f"Error occurred while sending RPC to Node {node_id}.") [at three places in the code] happens, it takes extra time in the heartbeat, and the heartbeat doesnt go to all nodes simultaniously and via non blocking calls. Need to do such that RPC is sent simultaniously to all nodes instead of using a for loop.
+4. (done) When print(f"Error occurred while sending RPC to Node {node_id}.") [at two places in the code] happens, it takes extra time in the heartbeat, and the heartbeat doesnt go to all nodes simultaniously and via non blocking calls. Need to do such that RPC is sent simultaniously to all nodes instead of using a for loop.
+5. Should leader wait for acks from the followers everytime he sends a heartbeat, in order to confirm his leadership?
 """
