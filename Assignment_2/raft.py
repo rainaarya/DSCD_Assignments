@@ -89,6 +89,7 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
         self.heartbeat_timer.start()
 
     def start_lease_timer(self):
+        self.heartbeat_success_nodes = set()
         self.lease_start_time = time.time()
         self.lease_timer = threading.Timer(LEASE_DURATION, self.lease_timeout)
         self.lease_timer.start()
@@ -170,8 +171,17 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
         self.start_heartbeat_timer()
 
     def lease_timeout(self):
-        print(f"Leader {self.node_id} lease renewal failed. Stepping Down.")
-        self.step_down()
+        if len(self.heartbeat_success_nodes) < (len(self.node_addresses) // 2):
+            print(f"Leader {self.node_id} failed to renew lease. Stepping down.")
+            self.step_down()
+        else:
+            self.start_lease_timer()
+
+        # remaining_lease_time = self.lease_timer.interval - (time.time() - self.lease_start_time)
+        # timer = threading.Timer(remaining_lease_time, check_lease_renewal)
+        # timer.start()
+        # print(f"Leader {self.node_id} lease renewal failed. Stepping Down.")
+        # self.step_down()
 
     def step_down(self):
         print(f"{self.node_id} Stepping down")
@@ -191,24 +201,15 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
 
     def send_heartbeats(self):
         print(f"Leader {self.node_id} sending heartbeat & Renewing Lease")
-        self.lease_timer.cancel()
-        self.start_lease_timer()
+        # self.lease_timer.cancel()
+        # self.start_lease_timer()
 
         threads = []
-        self.heartbeat_success_nodes = set()
         for node_id, node_address in self.node_addresses.items():
             if node_id != self.node_id:
                 thread = self.replicate_log_async(node_id)
                 threads.append(thread)
 
-        def check_lease_renewal():
-            if len(self.heartbeat_success_nodes) < (len(self.node_addresses) // 2):
-                print(f"Leader {self.node_id} failed to renew lease. Stepping down.")
-                self.step_down()
-
-        remaining_lease_time = self.lease_timer.interval - (time.time() - self.lease_start_time)
-        timer = threading.Timer(remaining_lease_time, check_lease_renewal)
-        timer.start()
         self.start_heartbeat_timer()
 
     def replicate_log_async(self, follower_id):
