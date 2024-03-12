@@ -247,7 +247,7 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
         return thread
 
     def commit_log_entries(self):
-        min_acks = (len(self.node_addresses) // 2) + 1
+        min_acks = (len(self.node_addresses) // 2)
         ready = [index for index in range(1, len(self.log) + 1)
                  if len([node_id for node_id, acked_length in self.acked_length.items()
                          if acked_length >= index]) >= min_acks]
