@@ -36,6 +36,8 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
         self.heartbeat_timer = None
         self.lease_timer = None
         self.old_leader_lease_timeout = 0
+        self.heartbeat_success_count = set()
+        self.lease_start_time = 0
         self.data_store = {}
         self.load_state()
 
@@ -87,6 +89,7 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
         self.heartbeat_timer.start()
 
     def start_lease_timer(self):
+        self.lease_start_time = time.time()
         self.lease_timer = threading.Timer(LEASE_DURATION, self.lease_timeout)
         self.lease_timer.start()
 
@@ -119,15 +122,14 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
                 thread = self.request_vote_async(node_id, last_term)
                 threads.append(thread)
 
-        # Wait for all threads to complete
-        # for thread in threads:
-        #     thread.join()
-        time.sleep(0.1)
+        def check_election_result():
+            if len(self.votes_received) >= (len(self.node_addresses) // 2) + 1:
+                self.become_leader()
+            else:
+                self.start_election_timer()
 
-        if len(self.votes_received) >= (len(self.node_addresses) // 2) + 1:
-            self.become_leader()
-        else:
-            self.start_election_timer()
+        timer = threading.Timer(0.1, check_election_result)  # Adjust the duration as needed
+        timer.start()
     
     def request_vote_async(self, node_id, last_term):
         def request_vote_task():
@@ -193,14 +195,20 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
         self.start_lease_timer()
 
         threads = []
+        self.heartbeat_success_nodes = set()
         for node_id, node_address in self.node_addresses.items():
             if node_id != self.node_id:
                 thread = self.replicate_log_async(node_id)
                 threads.append(thread)
-        # Wait for all threads to complete
-        # for thread in threads:
-        #     thread.join()
 
+        def check_lease_renewal():
+            if len(self.heartbeat_success_nodes) < (len(self.node_addresses) // 2):
+                print(f"Leader {self.node_id} failed to renew lease. Stepping down.")
+                self.step_down()
+
+        remaining_lease_time = self.lease_timer.interval - (time.time() - self.lease_start_time)
+        timer = threading.Timer(remaining_lease_time, check_lease_renewal)
+        timer.start()
         self.start_heartbeat_timer()
 
     def replicate_log_async(self, follower_id):
@@ -227,6 +235,7 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
                         self.sent_length[follower_id] = prefix_len + len(suffix)
                         self.acked_length[follower_id] = prefix_len + len(suffix)
                         self.commit_log_entries()
+                        self.heartbeat_success_nodes.add(follower_id)
                     else:
                         self.sent_length[follower_id] = max(0, self.sent_length.get(follower_id, 0) - 1)
                         self.replicate_log_async(follower_id)
