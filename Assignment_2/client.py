@@ -50,6 +50,5 @@ if __name__ == "__main__":
         2: "localhost:50052",
         3: "localhost:50053",
         4: "localhost:50054",
-        5: "localhost:50055",
     }
     run_client(node_addresses)
