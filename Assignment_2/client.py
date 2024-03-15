@@ -1,6 +1,14 @@
 import grpc
 import raft_pb2
 import raft_pb2_grpc
+import signal
+import os
+
+def signal_handler(signal, frame):
+    print("\nProgram exiting gracefully")
+    os._exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
 
 def run_client(node_addresses):
     leader_id = None
@@ -52,4 +60,7 @@ if __name__ == "__main__":
         3: "localhost:50053",
         4: "localhost:50054",
     }
-    run_client(node_addresses)
+    try:
+        run_client(node_addresses)
+    except SystemExit:
+        pass

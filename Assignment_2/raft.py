@@ -8,6 +8,7 @@ import os
 import sys
 from concurrent import futures
 import datetime
+import signal
 
 # Constants
 HEARTBEAT_INTERVAL = 1.0  # Heartbeat interval in seconds
@@ -40,6 +41,7 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
         self.heartbeat_success_count = set()
         self.lease_start_time = 0
         self.data_store = {}
+        self.timer_lock = threading.Lock()
         self.load_state()
         os.makedirs(f"logs_node_{self.node_id}", exist_ok=True)
         try:
@@ -93,32 +95,43 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
             f.write(f"{self.voted_for or ''}\n")
 
     def start_election_timer(self):
-        election_timeout = random.uniform(ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX)
-        self.election_timer = threading.Timer(election_timeout, self.start_election)
-        self.election_timer.start()
+        with self.timer_lock:
+            election_timeout = random.uniform(ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX)
+            self.election_timer = threading.Timer(election_timeout, self.start_election)
+            self.election_timer.start()
 
     def start_heartbeat_timer(self):
-        self.heartbeat_timer = threading.Timer(HEARTBEAT_INTERVAL, self.send_heartbeats)
-        self.heartbeat_timer.start()
+        with self.timer_lock:
+            self.heartbeat_timer = threading.Timer(HEARTBEAT_INTERVAL, self.send_heartbeats)
+            self.heartbeat_timer.start()
 
     def start_lease_timer(self):
-        self.lease_start_time = time.time()
-        self.lease_timer = threading.Timer(LEASE_DURATION, self.lease_timeout)
-        self.lease_timer.start()
+        with self.timer_lock:
+            self.lease_start_time = time.time()
+            self.lease_timer = threading.Timer(LEASE_DURATION, self.lease_timeout)
+            self.lease_timer.start()
 
     def cancel_election_timer(self):
-        if self.election_timer:
-            self.election_timer.cancel()
+        with self.timer_lock:
+            if self.election_timer:
+                self.election_timer.cancel()
+                self.election_timer = None
 
     def cancel_heartbeat_timer(self):
-        if self.heartbeat_timer:
-            self.heartbeat_timer.cancel()
+        with self.timer_lock:
+            if self.heartbeat_timer:
+                self.heartbeat_timer.cancel()
+                self.heartbeat_timer = None
 
     def cancel_lease_timer(self):
-        if self.lease_timer:
-            self.lease_timer.cancel()
+        with self.timer_lock:
+            if self.lease_timer:
+                self.lease_timer.cancel()
+                self.lease_timer = None
 
     def start_election(self):
+        # if self.state == LEADER:
+        #     return
         self.write_to_dump_file(f"Node {self.node_id} election timer timed out, Starting election.")
         self.state = CANDIDATE
         self.current_term += 1
@@ -176,7 +189,10 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
         self.votes_received = set()
         self.sent_length = {node_id: len(self.log) for node_id in self.node_addresses}
         self.acked_length = {node_id: 0 for node_id in self.node_addresses}
+        # Cancel all existing timers as the node becomes a leader
         self.cancel_election_timer()
+        self.cancel_heartbeat_timer()
+        self.cancel_lease_timer()
 
         self.write_to_dump_file("New Leader waiting for Old Leader Lease to timeout.")
         time.sleep(self.old_leader_lease_timeout)
@@ -396,7 +412,17 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
         else:
             return raft_pb2.ServeClientReply(Data="", LeaderID=str(self.current_leader), Success=False)
 
+def signal_handler(sig, frame):
+    print("Received SIGINT signal. Exiting gracefully...")
+    # Stop all timers
+    node.save_state()
+    node.cancel_election_timer()
+    node.cancel_heartbeat_timer()
+    node.cancel_lease_timer()
+    sys.exit(0)
+
 def serve(node_id, node_addresses):
+    global node  # Make the node object accessible to the signal_handler
     node = RaftNode(node_id, node_addresses)
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     raft_pb2_grpc.add_RaftServicer_to_server(node, server)
@@ -408,6 +434,7 @@ def serve(node_id, node_addresses):
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
+        print("Received keyboard interrupt. Exiting gracefully...")
         server.stop(0)
 
 def main():
@@ -416,12 +443,13 @@ def main():
         sys.exit(1)
     node_id = int(sys.argv[1])
     node_addresses = {
-    0: "localhost:50050",
-    1: "localhost:50051",
-    2: "localhost:50052",
-    3: "localhost:50053",
-    4: "localhost:50054",
+        0: "localhost:50050",
+        1: "localhost:50051",
+        2: "localhost:50052",
+        3: "localhost:50053",
+        4: "localhost:50054",
     }
+    signal.signal(signal.SIGINT, signal_handler)
     serve(node_id, node_addresses)
 
 if __name__ == "__main__":
