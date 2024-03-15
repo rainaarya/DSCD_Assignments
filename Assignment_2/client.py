@@ -11,13 +11,14 @@ def run_client(node_addresses):
                 with grpc.insecure_channel(node_address) as channel:
                     stub = raft_pb2_grpc.RaftStub(channel)
                     try:
-                        response = stub.ServeClient(raft_pb2.ServeClientArgs(Request="GET __leader__"))
+                        response = stub.ServeClient(raft_pb2.ServeClientArgs(Request="GET __leader__"), timeout=5)
                         if response.Success:
                             leader_id = response.LeaderID
                             print(f"Connected to leader: {leader_id}")
                             leader_found = True
                             break
                     except grpc.RpcError as e:
+                        print("Leader is unavailable. Trying again...")
                         continue
             if not leader_found:
                 print("No leader found in the network. Exiting.")
@@ -29,7 +30,7 @@ def run_client(node_addresses):
                     while True:
                         request = input("Enter command (GET <key> or SET <key> <value>): ")
                         try:
-                            response = stub.ServeClient(raft_pb2.ServeClientArgs(Request=request))
+                            response = stub.ServeClient(raft_pb2.ServeClientArgs(Request=request), timeout=5)
                             if response.Success:
                                 print(f"Response: {response.Data}")
                             else:
@@ -37,7 +38,7 @@ def run_client(node_addresses):
                                 leader_id = response.LeaderID
                                 break
                         except grpc.RpcError as e:
-                            print(f"Error occurred: {e}")
+                            print("Leader is unavailable. Trying again...")
                             leader_id = None
                             break
             except:

@@ -13,7 +13,7 @@ import datetime
 HEARTBEAT_INTERVAL = 1.0  # Heartbeat interval in seconds
 ELECTION_TIMEOUT_MIN = 5.0  # Minimum election timeout in seconds
 ELECTION_TIMEOUT_MAX = 10.0  # Maximum election timeout in seconds
-LEASE_DURATION = 2.5  # Leader lease duration in seconds
+LEASE_DURATION = 10  # Leader lease duration in seconds
 
 # Raft node states
 FOLLOWER = 0
@@ -158,7 +158,10 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
                     response = stub.RequestVote(request, timeout=1)
                     if response.vote_granted:
                         self.votes_received.add(node_id)
-                        self.old_leader_lease_timeout = max(self.old_leader_lease_timeout, response.old_leader_lease_timeout)
+                        remaining_lease_duration = self.old_leader_lease_timeout - (time.time() - self.lease_start_time)
+                        if remaining_lease_duration < 0:
+                            remaining_lease_duration = 0
+                        self.old_leader_lease_timeout = max(remaining_lease_duration, response.old_leader_lease_timeout)
                 except grpc.RpcError as e:
                     self.write_to_dump_file(f"Error occurred while sending RPC to Node {node_id}.")
 
@@ -204,24 +207,25 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
 
     def send_heartbeats(self):
         self.write_to_dump_file(f"Leader {self.node_id} sending heartbeat & Renewing Lease")
-        self.lease_timer.cancel()
-        self.start_lease_timer()
 
         threads = []
-        self.heartbeat_success_nodes = set()
+        #self.heartbeat_success_nodes = set()
         for node_id, node_address in self.node_addresses.items():
             if node_id != self.node_id:
                 thread = self.replicate_log_async(node_id)
                 threads.append(thread)
 
-        def check_lease_renewal():
-            if len(self.heartbeat_success_nodes) < (len(self.node_addresses) // 2):
-                self.write_to_dump_file(f"Leader {self.node_id} failed to renew lease. Stepping down.")
-                self.step_down()
+        # Check if the lease should be renewed
+        if len(self.heartbeat_success_count) >= (len(self.node_addresses) // 2):
+            self.write_to_dump_file("Lease renewed successfully.")
+            self.lease_start_time = time.time()
+            self.cancel_lease_timer()
+            self.start_lease_timer()
+            self.heartbeat_success_count = set()  # Reset the count after renewing the lease
+        # else:
+        #     self.write_to_dump_file("Lease not renewed yet.")
 
-        remaining_lease_time = self.lease_timer.interval - (time.time() - self.lease_start_time)
-        timer = threading.Timer(remaining_lease_time, check_lease_renewal)
-        timer.start()
+        # Ensure heartbeat continues
         self.start_heartbeat_timer()
 
     def replicate_log_async(self, follower_id):
@@ -248,7 +252,7 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
                         self.sent_length[follower_id] = prefix_len + len(suffix)
                         self.acked_length[follower_id] = prefix_len + len(suffix)
                         self.commit_log_entries()
-                        self.heartbeat_success_nodes.add(follower_id)
+                        self.heartbeat_success_count.add(follower_id)
                     else:
                         self.sent_length[follower_id] = max(0, self.sent_length.get(follower_id, 0) - 1)
                         self.replicate_log_async(follower_id)
@@ -291,10 +295,15 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
                     self.voted_for = request.candidate_id
                     self.save_state()
                     self.write_to_dump_file(f"Vote granted for Node {request.candidate_id} in term {request.term}.")
+
+                    remaining_lease_duration = self.old_leader_lease_timeout - (time.time() - self.lease_start_time)
+                    if remaining_lease_duration < 0:
+                        remaining_lease_duration = 0
+
                     return raft_pb2.RequestVoteReply(
                         term=self.current_term,
                         vote_granted=True,
-                        old_leader_lease_timeout=self.old_leader_lease_timeout
+                        old_leader_lease_timeout=remaining_lease_duration
                     )
                 else:
                     self.write_to_dump_file(f"Vote denied for Node {request.candidate_id} in term {request.term}.")
@@ -330,6 +339,7 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
             self.current_leader = request.leader_id
             self.cancel_election_timer()
             self.old_leader_lease_timeout = request.lease_duration
+            self.lease_start_time = time.time()
             self.start_election_timer()
 
         log_ok = (len(self.log) >= request.prev_log_index) and \
@@ -421,7 +431,8 @@ if __name__ == "__main__":
 """ 
 1. (partially done, testing needed) handle the case when the leader should respond success to the client only after the entry has been committed on the leader.
 2. (done) log and metadata retireval when the node is started again (i think only logs are retrieved and not data_store, so thats why right now nothing is retrived if we do a get request?)     
-3. check if lease time stuff is working properly (assignment test case no. 4)       
+3. (done?) check if lease time stuff is working properly (assignment test case no. 4)       
 4. (done) When print(f"Error occurred while sending RPC to Node {node_id}.") [at two places in the code] happens, it takes extra time in the heartbeat, and the heartbeat doesnt go to all nodes simultaniously and via non blocking calls. Need to do such that RPC is sent simultaniously to all nodes instead of using a for loop.
-5. Should leader wait for acks from the followers everytime he sends a heartbeat, in order to confirm his leadership?
+5. (no, done) Should leader wait for acks from the followers everytime he sends a heartbeat, in order to confirm his leadership?
+6. When we do a SET operation, then the election and lease timers get messed up and started up somehow in the leader, seems like they do not appear to get cancelled. Need to check.
 """
