@@ -42,7 +42,7 @@ def run_client(node_addresses):
                             if response.Success:
                                 print(f"Response: {response.Data}")
                             else:
-                                print(f"Leader changed. Connecting to new leader.")
+                                print(f"Leader changed. Connecting to new leader...")
                                 leader_id = response.LeaderID
                                 break
                         except grpc.RpcError as e:

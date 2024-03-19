@@ -271,7 +271,8 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
                         self.heartbeat_success_count.add(follower_id)
                     else:
                         self.sent_length[follower_id] = max(0, self.sent_length.get(follower_id, 0) - 1)
-                        self.replicate_log_async(follower_id)
+                        #self.replicate_log_async(follower_id)
+                        self.heartbeat_success_count.add(follower_id)
                 except grpc.RpcError as e:
                     self.write_to_dump_file(f"Error occurred while sending RPC to Node {follower_id}.")
 
@@ -406,7 +407,7 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
 
                 # Check if the committed entry matches the appended entry
                 if self.log[self.commit_length - 1] == log_entry:
-                    return raft_pb2.ServeClientReply(Data="", LeaderID=str(self.node_id), Success=True)
+                    return raft_pb2.ServeClientReply(Data=f"{key} set to {value} successfully!", LeaderID=str(self.node_id), Success=True)
                 else:
                     return raft_pb2.ServeClientReply(Data="", LeaderID=str(self.node_id), Success=False)
         else:
@@ -462,5 +463,5 @@ if __name__ == "__main__":
 3. (done?) check if lease time stuff is working properly (assignment test case no. 4)       
 4. (done) When print(f"Error occurred while sending RPC to Node {node_id}.") [at two places in the code] happens, it takes extra time in the heartbeat, and the heartbeat doesnt go to all nodes simultaniously and via non blocking calls. Need to do such that RPC is sent simultaniously to all nodes instead of using a for loop.
 5. (no, done) Should leader wait for acks from the followers everytime he sends a heartbeat, in order to confirm his leadership?
-6. When we do a SET operation, then the election and lease timers get messed up and started up somehow in the leader, seems like they do not appear to get cancelled. Need to check.
+6. (fixed, by adding timer locks) When we do a SET operation, then the election and lease timers get messed up and started up somehow in the leader, seems like they do not appear to get cancelled. Need to check.
 """
