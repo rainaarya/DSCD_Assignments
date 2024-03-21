@@ -444,11 +444,11 @@ def main():
         sys.exit(1)
     node_id = int(sys.argv[1])
     node_addresses = {
-        0: "localhost:50050",
-        1: "localhost:50051",
-        2: "localhost:50052",
-        3: "localhost:50053",
-        4: "localhost:50054",
+        0: "10.190.0.2:50050",
+        1: "10.190.0.3:50051",
+        2: "10.190.0.4:50052",
+        3: "10.190.0.5:50053",
+        4: "10.190.0.6:50054",
     }
     signal.signal(signal.SIGINT, signal_handler)
     serve(node_id, node_addresses)
