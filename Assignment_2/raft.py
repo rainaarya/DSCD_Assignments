@@ -206,7 +206,8 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
         self.step_down()
 
     def step_down(self):
-        self.write_to_dump_file(f"{self.node_id} Stepping down")
+        if self.state == LEADER:
+            self.write_to_dump_file(f"{self.node_id} Stepping down")
         self.state = FOLLOWER
         self.current_leader = None
         self.votes_received = set()
