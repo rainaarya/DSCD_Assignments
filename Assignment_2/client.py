@@ -53,13 +53,8 @@ def run_client(node_addresses):
                 leader_id = None
 
 if __name__ == "__main__":
-    node_addresses = {
-        0: "10.190.0.2:50050",
-        1: "10.190.0.3:50051",
-        2: "10.190.0.4:50052",
-        3: "10.190.0.5:50053",
-        4: "10.190.0.6:50054",
-    }
+    N = int(input("Enter the number of nodes: "))
+    node_addresses = {i: f"10.190.0.{i+2}:5005{i}" for i in range(N)}
     try:
         run_client(node_addresses)
     except SystemExit:

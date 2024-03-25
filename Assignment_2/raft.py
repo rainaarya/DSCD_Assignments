@@ -439,17 +439,12 @@ def serve(node_id, node_addresses):
         server.stop(0)
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python raft.py <node_id>")
+    if len(sys.argv) < 3:
+        print("Usage: python raft.py <node_id> <num_nodes>")
         sys.exit(1)
     node_id = int(sys.argv[1])
-    node_addresses = {
-        0: "10.190.0.2:50050",
-        1: "10.190.0.3:50051",
-        2: "10.190.0.4:50052",
-        3: "10.190.0.5:50053",
-        4: "10.190.0.6:50054",
-    }
+    num_nodes = int(sys.argv[2])
+    node_addresses = {i: f"10.190.0.{i+2}:5005{i}" for i in range(num_nodes)}
     signal.signal(signal.SIGINT, signal_handler)
     serve(node_id, node_addresses)
 
