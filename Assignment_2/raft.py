@@ -59,9 +59,14 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
     def load_state(self):
         try:
             with open(f"logs_node_{self.node_id}/metadata.txt", "r") as f:
-                self.commit_length = int(f.readline().strip())
-                self.current_term = int(f.readline().strip())
-                self.voted_for = f.readline().strip() or None
+                lines = f.readlines()
+                for line in lines:
+                    if line.startswith("commit_length:"):
+                        self.commit_length = int(line.split(":")[1].strip())
+                    elif line.startswith("current_term:"):
+                        self.current_term = int(line.split(":")[1].strip())
+                    elif line.startswith("voted_for:"):
+                        self.voted_for = line.split(":")[1].strip() or None
 
             with open(f"logs_node_{self.node_id}/logs.txt", "r") as f:
                 lines = f.readlines()
@@ -90,9 +95,9 @@ class RaftNode(raft_pb2_grpc.RaftServicer):
                 elif entry.operation == "SET":
                     f.write(f"SET {entry.key} {entry.value} {entry.term}\n")
         with open(f"logs_node_{self.node_id}/metadata.txt", "w") as f:
-            f.write(f"{self.commit_length}\n")
-            f.write(f"{self.current_term}\n")
-            f.write(f"{self.voted_for or ''}\n")
+            f.write(f"commit_length: {self.commit_length}\n")
+            f.write(f"current_term: {self.current_term}\n")
+            f.write(f"voted_for: {self.voted_for if self.voted_for is not None else ''}\n")
 
     def start_election_timer(self):
         with self.timer_lock:
