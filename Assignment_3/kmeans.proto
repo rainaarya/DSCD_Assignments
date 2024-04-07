@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+service Mapper {
+    rpc Map (MapperRequest) returns (MapperResponse) {}
+    rpc GetPartitionData (PartitionDataRequest) returns (PartitionDataResponse) {}
+}
+
+service Reducer {
+    rpc Reduce (ReducerRequest) returns (ReducerResponse) {}
+}
+
+message MapperRequest {
+    int32 mapper_id = 1;
+    repeated Centroid centroids = 2;
+    string input_split = 3;
+}
+
+message MapperResponse {
+    string status = 1;
+}
+
+message ReducerRequest {
+    int32 reducer_id = 1;
+    int32 num_mappers = 2;
+}
+
+message ReducerResponse {
+    string status = 1;
+    int32 centroid_id = 2;
+    double centroid_x = 3;
+    double centroid_y = 4;
+}
+message Centroid {
+    double x = 1;
+    double y = 2;
+}
+
+message PartitionDataRequest {
+    int32 mapper_id = 1;
+    int32 reducer_id = 2;
+}
+
+message PartitionDataResponse {
+    repeated PartitionData partition_data = 1;
+}
+
+message PartitionData {
+    int32 centroid_id = 1;
+    Point point = 2;
+}
+
+message Point {
+    double x = 1;
+    double y = 2;
+}
