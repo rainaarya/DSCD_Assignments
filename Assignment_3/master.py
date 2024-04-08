@@ -26,10 +26,12 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations):
         mapper_requests = []
         for i in range(num_mappers):
             input_split_str = ''.join(input_splits[i])  # Serialize input split to string
+            #print("Mapper", i, "input split:", input_split_str)
             request = kmeans_pb2.MapperRequest(
                 mapper_id=i,
                 centroids=centroids,
-                input_split=input_split_str
+                input_split=input_split_str,
+                num_reducers=num_reducers
             )
             mapper_requests.append(request)
         
@@ -57,9 +59,10 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations):
         
         reducer_responses = []
         for stub, request in zip(reducer_stubs, reducer_requests):
-            response = stub.Reduce(request)
-            reducer_responses.append(response)
-            print(f"Reducer {request.reducer_id} response: {response.status}")
+            responses = stub.Reduce(request)
+            for response in responses:
+                reducer_responses.append(response)
+                print(f"Reducer {request.reducer_id} response: {response.status}")
         
         # Compile centroids
         print("Compiling centroids...")
@@ -84,6 +87,12 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations):
     print("K-means clustering completed.")
 
 def has_converged(prev_centroids, curr_centroids, threshold=1e-4):
+    if len(prev_centroids) != len(curr_centroids):
+        return False
+
+    prev_centroids = sorted(prev_centroids, key=lambda c: (c.x, c.y))
+    curr_centroids = sorted(curr_centroids, key=lambda c: (c.x, c.y))
+
     for prev_centroid, curr_centroid in zip(prev_centroids, curr_centroids):
         if euclidean_distance(prev_centroid, curr_centroid) > threshold:
             return False
@@ -104,11 +113,12 @@ def initialize_centroids(num_centroids):
     return centroids
 
 def compile_centroids(reducer_responses):
-    centroids = []
+    centroids = {}
     for response in reducer_responses:
+        centroid_id = response.centroid_id
         centroid = kmeans_pb2.Centroid(x=response.centroid_x, y=response.centroid_y)
-        centroids.append(centroid)
-    return centroids
+        centroids[centroid_id] = centroid
+    return list(centroids.values())
 
 def split_input_data(num_mappers):
     input_splits = []
@@ -126,7 +136,7 @@ def split_input_data(num_mappers):
 if __name__ == "__main__":
     num_mappers = 3
     num_reducers = 2
-    num_centroids = 2
-    num_iterations = 5
+    num_centroids = 3
+    num_iterations = 100
     
     run_master(num_mappers, num_reducers, num_centroids, num_iterations)

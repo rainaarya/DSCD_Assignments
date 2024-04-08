@@ -11,6 +11,7 @@ class MapperServicer(kmeans_pb2_grpc.MapperServicer):
         mapper_id = request.mapper_id
         centroids = request.centroids
         input_split = request.input_split
+        num_reducers = request.num_reducers
         
         # Read input split
         data_points = self.read_input_split(input_split)
@@ -19,7 +20,7 @@ class MapperServicer(kmeans_pb2_grpc.MapperServicer):
         mapped_data = self.map_data_points(data_points, centroids)
         
         # Partition mapped data
-        partitioned_data = self.partition_data(mapped_data, len(centroids))
+        partitioned_data = self.partition_data(mapped_data, num_reducers)
         
         # Save partitioned data
         self.save_partitioned_data(partitioned_data, mapper_id)
@@ -32,12 +33,14 @@ class MapperServicer(kmeans_pb2_grpc.MapperServicer):
         
         file_path = f"Mappers/M{mapper_id + 1}/partition_{reducer_id + 1}.txt"
         partition_data = []
-        with open(file_path, "r") as file:
-            for line in file:
-                data = line.strip().split(",")
-                centroid_id = int(data[0])
-                point = kmeans_pb2.Point(x=float(data[1]), y=float(data[2]))
-                partition_data.append(kmeans_pb2.PartitionData(centroid_id=centroid_id, point=point))
+        
+        if os.path.exists(file_path):
+            with open(file_path, "r") as file:
+                for line in file:
+                    data = line.strip().split(",")
+                    centroid_id = int(data[0])
+                    point = kmeans_pb2.Point(x=float(data[1]), y=float(data[2]))
+                    partition_data.append(kmeans_pb2.PartitionData(centroid_id=centroid_id, point=point))
         
         return kmeans_pb2.PartitionDataResponse(partition_data=partition_data)
     

@@ -6,13 +6,14 @@ service Mapper {
 }
 
 service Reducer {
-    rpc Reduce (ReducerRequest) returns (ReducerResponse) {}
+    rpc Reduce (ReducerRequest) returns (stream ReducerResponse) {}
 }
 
 message MapperRequest {
     int32 mapper_id = 1;
     repeated Centroid centroids = 2;
     string input_split = 3;
+    int32 num_reducers = 4;
 }
 
 message MapperResponse {
