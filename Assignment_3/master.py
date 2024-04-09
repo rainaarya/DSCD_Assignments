@@ -5,8 +5,9 @@ import kmeans_pb2_grpc
 import random
 import os
 import math
+import time
 
-def run_master(num_mappers, num_reducers, num_centroids, num_iterations):
+def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_retries=5):
     # Initialize centroids randomly from input data points
     centroids = initialize_centroids(num_centroids)
     input_splits = split_input_data(num_mappers)
@@ -26,7 +27,6 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations):
         mapper_requests = []
         for i in range(num_mappers):
             input_split_str = ''.join(input_splits[i])  # Serialize input split to string
-            #print("Mapper", i, "input split:", input_split_str)
             request = kmeans_pb2.MapperRequest(
                 mapper_id=i,
                 centroids=centroids,
@@ -34,13 +34,30 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations):
                 num_reducers=num_reducers
             )
             mapper_requests.append(request)
-        
+
         mapper_responses = []
-        for stub, request in zip(mapper_stubs, mapper_requests):
-            response = stub.Map(request)
-            mapper_responses.append(response)
-            print(f"Mapper {request.mapper_id} response: {response.status}")
-        
+        mapper_retries = {}
+        while len(mapper_responses) < num_mappers:
+            for i, (stub, request) in enumerate(zip(mapper_stubs, mapper_requests)):
+                if i not in [m[0] for m in mapper_responses]:
+                    try:
+                        response = stub.Map(request)
+                        mapper_responses.append((i, response))
+                        print(f"Mapper {request.mapper_id} response: {response.status}")
+                    except grpc.RpcError as e:
+                        print(f"Mapper {request.mapper_id} failed")
+                        if i not in mapper_retries:
+                            mapper_retries[i] = 0
+                        mapper_retries[i] += 1
+                        if mapper_retries[i] <= max_retries:
+                            print(f"Retrying Mapper {request.mapper_id}...")
+                            # Recreate the channel and stub for the failed mapper
+                            channel = grpc.insecure_channel(f'localhost:{50051 + i}')
+                            stub = kmeans_pb2_grpc.MapperStub(channel)
+                            mapper_stubs[i] = stub
+                            time.sleep(1)  # Wait before retrying
+                        else:
+                            raise Exception(f"Mapper {request.mapper_id} failed after {max_retries} retries")        
         # Invoke reducers
         print("Invoking Reducers...")
         reducer_stubs = []
@@ -48,7 +65,7 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations):
             channel = grpc.insecure_channel(f'localhost:{60051 + i}')
             stub = kmeans_pb2_grpc.ReducerStub(channel)
             reducer_stubs.append(stub)
-        
+
         reducer_requests = []
         for i in range(num_reducers):
             request = kmeans_pb2.ReducerRequest(
@@ -56,14 +73,31 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations):
                 num_mappers=num_mappers
             )
             reducer_requests.append(request)
-        
+
         reducer_responses = []
-        for stub, request in zip(reducer_stubs, reducer_requests):
-            responses = stub.Reduce(request)
-            for response in responses:
-                reducer_responses.append(response)
-                print(f"Reducer {request.reducer_id} response: {response.status}")
-        
+        reducer_retries = {}
+        while len(reducer_responses) < num_reducers:
+            for i, (stub, request) in enumerate(zip(reducer_stubs, reducer_requests)):
+                if i not in [r[0] for r in reducer_responses]:
+                    try:
+                        responses = stub.Reduce(request)
+                        for response in responses:
+                            reducer_responses.append((i, response))
+                            print(f"Reducer {request.reducer_id} response: {response.status}")
+                    except grpc.RpcError as e:
+                        print(f"Reducer {request.reducer_id} failed")
+                        if i not in reducer_retries:
+                            reducer_retries[i] = 0
+                        reducer_retries[i] += 1
+                        if reducer_retries[i] <= max_retries:
+                            print(f"Retrying Reducer {request.reducer_id}...")
+                            # Recreate the channel and stub for the failed reducer
+                            channel = grpc.insecure_channel(f'localhost:{60051 + i}')
+                            stub = kmeans_pb2_grpc.ReducerStub(channel)
+                            reducer_stubs[i] = stub
+                            time.sleep(1)  # Wait before retrying
+                        else:
+                            raise Exception(f"Reducer {request.reducer_id} failed after {max_retries} retries")        
         # Compile centroids
         print("Compiling centroids...")
         updated_centroids = compile_centroids(reducer_responses)
@@ -114,7 +148,9 @@ def initialize_centroids(num_centroids):
 
 def compile_centroids(reducer_responses):
     centroids = {}
-    for response in reducer_responses:
+    for reducer_id, response in reducer_responses:
+        if response.status == "NO_TASKS":
+            continue
         centroid_id = response.centroid_id
         centroid = kmeans_pb2.Centroid(x=response.centroid_x, y=response.centroid_y)
         centroids[centroid_id] = centroid
@@ -135,8 +171,11 @@ def split_input_data(num_mappers):
 
 if __name__ == "__main__":
     num_mappers = 3
-    num_reducers = 2
+    num_reducers = 3
     num_centroids = 3
     num_iterations = 100
     
-    run_master(num_mappers, num_reducers, num_centroids, num_iterations)
+    try:
+        run_master(num_mappers, num_reducers, num_centroids, num_iterations)
+    except Exception as e:
+        print(e)

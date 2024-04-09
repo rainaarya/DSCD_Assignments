@@ -91,12 +91,17 @@ class MapperServicer(kmeans_pb2_grpc.MapperServicer):
                         file.write(f"{centroid_id},{point[0]},{point[1]}\n")
 
 def serve():
-    port = input("Please enter the port number: ")
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-    kmeans_pb2_grpc.add_MapperServicer_to_server(MapperServicer(), server)
-    server.add_insecure_port(f'[::]:{port}')
-    server.start()
-    server.wait_for_termination()
+    try:
+        port = input("Please enter the port number: ")
+        server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+        kmeans_pb2_grpc.add_MapperServicer_to_server(MapperServicer(), server)
+        server.add_insecure_port(f'[::]:{port}')
+        server.start()
+        server.wait_for_termination()
+    except KeyboardInterrupt:
+        print("Interrupt received, stopping server...")
+        server.stop(0)
+        print("Server stopped.")
 
 if __name__ == "__main__":
     serve()
