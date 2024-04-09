@@ -45,12 +45,13 @@ class MapperServicer(kmeans_pb2_grpc.MapperServicer):
         return kmeans_pb2.PartitionDataResponse(partition_data=partition_data)
     
     def read_input_split(self, input_split):
+        start_index, end_index = map(int, input_split.split(','))
         data_points = []
-        lines = input_split.split('\n')  # Split input split string into lines
-        for line in lines:
-            if line.strip():  # Skip empty lines
-                point = line.strip().split(",")
-                data_points.append((float(point[0]), float(point[1])))
+        with open("Input/points.txt", "r") as file:
+            for i, line in enumerate(file):
+                if start_index <= i < end_index:
+                    point = line.strip().split(",")
+                    data_points.append((float(point[0]), float(point[1])))
         return data_points
     
     def map_data_points(self, data_points, centroids):

@@ -26,7 +26,7 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
             
         mapper_requests = []
         for i in range(num_mappers):
-            input_split_str = ''.join(input_splits[i])  # Serialize input split to string
+            input_split_str = f"{input_splits[i][0]},{input_splits[i][1]}"  # Serialize input split range to string
             request = kmeans_pb2.MapperRequest(
                 mapper_id=i,
                 centroids=centroids,
@@ -159,14 +159,14 @@ def compile_centroids(reducer_responses):
 def split_input_data(num_mappers):
     input_splits = []
     with open("Input/points.txt", "r") as file:
-        lines = file.readlines()
-        chunk_size = len(lines) // num_mappers
+        num_lines = sum(1 for line in file)
+        chunk_size = num_lines // num_mappers
         for i in range(num_mappers):
             start = i * chunk_size
             end = start + chunk_size
             if i == num_mappers - 1:
-                end = len(lines)
-            input_splits.append(lines[start:end])
+                end = num_lines
+            input_splits.append((start, end))
     return input_splits
 
 if __name__ == "__main__":
