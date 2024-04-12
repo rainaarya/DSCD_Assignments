@@ -6,8 +6,15 @@ import random
 import os
 import math
 import time
+import shutil
 
 def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_retries=5):
+    
+    # Delete the directories if they exist
+    for directory in ["Mappers", "Reducers"]:
+        if os.path.exists(directory):
+            shutil.rmtree(directory)
+
     # Initialize centroids randomly from input data points
     centroids = initialize_centroids(num_centroids)
     input_splits = split_input_data(num_mappers)
@@ -36,28 +43,59 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
             mapper_requests.append(request)
 
         mapper_responses = []
-        mapper_retries = {}
+        failed_mappers = set()
         while len(mapper_responses) < num_mappers:
             for i, (stub, request) in enumerate(zip(mapper_stubs, mapper_requests)):
-                if i not in [m[0] for m in mapper_responses]:
+                if i not in [m[0] for m in mapper_responses] and i not in failed_mappers:
                     try:
                         response = stub.Map(request)
-                        mapper_responses.append((i, response))
-                        print(f"Mapper {request.mapper_id} response: {response.status}")
+                        if response.status == "SUCCESS":
+                            mapper_responses.append((i, response))
+                            print(f"Mapper ID {request.mapper_id} response: {response.status}")
+                        elif response.status == "FAILED":
+                            failed_mappers.add(i)
+                            print(f"Mapper ID {request.mapper_id} failed")
                     except grpc.RpcError as e:
-                        print(f"Mapper {request.mapper_id} failed")
-                        if i not in mapper_retries:
-                            mapper_retries[i] = 0
-                        mapper_retries[i] += 1
-                        if mapper_retries[i] <= max_retries:
-                            print(f"Retrying Mapper {request.mapper_id}...")
-                            # Recreate the channel and stub for the failed mapper
-                            channel = grpc.insecure_channel(f'localhost:{50051 + i}')
-                            stub = kmeans_pb2_grpc.MapperStub(channel)
-                            mapper_stubs[i] = stub
-                            time.sleep(1)  # Wait before retrying
-                        else:
-                            raise Exception(f"Mapper {request.mapper_id} failed after {max_retries} retries")        
+                        failed_mappers.add(i)
+                        print(f"Mapper ID {request.mapper_id} failed")
+
+            if failed_mappers:
+                # Reassign failed mapper tasks to available mappers or completed mappers
+                available_mappers = set(range(num_mappers)) - failed_mappers
+                for i in failed_mappers:
+                    if available_mappers:
+                        new_mapper_id = random.choice(list(available_mappers))
+                        request = mapper_requests[i]
+                        #request.mapper_id = new_mapper_id
+                        stub = mapper_stubs[new_mapper_id]
+                        try:
+                            response = stub.Map(request)
+                            if response.status == "SUCCESS":
+                                mapper_responses.append((new_mapper_id, response))
+                                print(f"Reassigned Mapper ID {i} to Mapper ID {new_mapper_id}")
+                            elif response.status == "FAILED":
+                                failed_mappers.add(new_mapper_id)
+                                print(f"Reassigned Mapper ID {new_mapper_id} failed")
+                        except grpc.RpcError as e:
+                            failed_mappers.add(new_mapper_id)
+                            print(f"Reassigned Mapper ID {new_mapper_id} failed")
+                    else:
+                        try:
+                            raise Exception("All mappers failed, waiting for 5 seconds before retrying")
+                        except Exception as e:
+                            print(e)
+                            time.sleep(5)
+                            failed_mappers = set()
+
+                            mapper_stubs = []
+                            for i in range(num_mappers):
+                                channel = grpc.insecure_channel(f'localhost:{50051 + i}')
+                                stub = kmeans_pb2_grpc.MapperStub(channel)
+                                mapper_stubs.append(stub)                                
+                            break
+
+                            
+
         # Invoke reducers
         print("Invoking Reducers...")
         reducer_stubs = []
@@ -75,29 +113,70 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
             reducer_requests.append(request)
 
         reducer_responses = []
-        reducer_retries = {}
+        failed_reducers = set()
         while len(reducer_responses) < num_reducers:
             for i, (stub, request) in enumerate(zip(reducer_stubs, reducer_requests)):
-                if i not in [r[0] for r in reducer_responses]:
+                if i not in [r[0] for r in reducer_responses] and i not in failed_reducers:
                     try:
                         responses = stub.Reduce(request)
+                        success = False
                         for response in responses:
-                            reducer_responses.append((i, response))
-                            print(f"Reducer {request.reducer_id} response: {response.status}")
+                            if response.status == "SUCCESS":
+                                success = True
+                                reducer_responses.append((i, response))
+                                print(f"Reducer ID {request.reducer_id} response: {response.status}")
+                            elif response.status == "FAILED":
+                                failed_reducers.add(i)
+                                print(f"Reducer ID {request.reducer_id} failed")
+                                break
+                        if not success:
+                            failed_reducers.add(i)
                     except grpc.RpcError as e:
-                        print(f"Reducer {request.reducer_id} failed")
-                        if i not in reducer_retries:
-                            reducer_retries[i] = 0
-                        reducer_retries[i] += 1
-                        if reducer_retries[i] <= max_retries:
-                            print(f"Retrying Reducer {request.reducer_id}...")
-                            # Recreate the channel and stub for the failed reducer
-                            channel = grpc.insecure_channel(f'localhost:{60051 + i}')
-                            stub = kmeans_pb2_grpc.ReducerStub(channel)
-                            reducer_stubs[i] = stub
-                            time.sleep(1)  # Wait before retrying
-                        else:
-                            raise Exception(f"Reducer {request.reducer_id} failed after {max_retries} retries")        
+                        failed_reducers.add(i)
+                        print(f"Reducer ID {request.reducer_id} failed")
+
+            if failed_reducers:
+                # Reassign failed reducer tasks to available reducers or completed reducers
+                available_reducers = set(range(num_reducers)) - failed_reducers
+                for i in failed_reducers:
+                    if available_reducers:
+                        new_reducer_id = random.choice(list(available_reducers))
+                        request = reducer_requests[i]
+                        #request.reducer_id = new_reducer_id
+                        stub = reducer_stubs[new_reducer_id]
+                        try:
+                            responses = stub.Reduce(request)
+                            success = False
+                            for response in responses:
+                                if response.status == "SUCCESS":
+                                    success = True
+                                    reducer_responses.append((new_reducer_id, response))
+                                    print(f"Reassigned Reducer ID {i} to Reducer ID {new_reducer_id}")
+                                elif response.status == "FAILED":
+                                    failed_reducers.add(new_reducer_id)
+                                    print(f"Reassigned Reducer ID {new_reducer_id} failed")
+                                    break
+                            if not success:
+                                failed_reducers.add(new_reducer_id)
+                        except grpc.RpcError as e:
+                            failed_reducers.add(new_reducer_id)
+                            print(f"Reassigned Reducer ID {new_reducer_id} failed")
+                    else:
+                        try:
+                            raise Exception("All reducers failed, waiting for 5 seconds before retrying")
+                        except Exception as e:
+                            print(e)
+                            time.sleep(5)
+                            failed_reducers = set()
+
+                            reducer_stubs = []
+                            for i in range(num_reducers):
+                                channel = grpc.insecure_channel(f'localhost:{60051 + i}')
+                                stub = kmeans_pb2_grpc.ReducerStub(channel)
+                                reducer_stubs.append(stub)
+                            break
+                        
+
         # Compile centroids
         print("Compiling centroids...")
         updated_centroids = compile_centroids(reducer_responses)
@@ -173,7 +252,7 @@ if __name__ == "__main__":
     num_mappers = 3
     num_reducers = 3
     num_centroids = 3
-    num_iterations = 100
+    num_iterations = 50
     
     try:
         run_master(num_mappers, num_reducers, num_centroids, num_iterations)

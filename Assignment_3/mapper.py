@@ -7,6 +7,10 @@ import math
 import os
 
 class MapperServicer(kmeans_pb2_grpc.MapperServicer):
+
+    def __init__(self, my_mapper_id):
+        self.my_mapper_id = my_mapper_id
+
     def Map(self, request, context):
         mapper_id = request.mapper_id
         centroids = request.centroids
@@ -23,7 +27,7 @@ class MapperServicer(kmeans_pb2_grpc.MapperServicer):
         partitioned_data = self.partition_data(mapped_data, num_reducers)
         
         # Save partitioned data
-        self.save_partitioned_data(partitioned_data, mapper_id)
+        self.save_partitioned_data(partitioned_data, mapper_id, self.my_mapper_id)
         
         return kmeans_pb2.MapperResponse(status="SUCCESS")
 
@@ -81,12 +85,14 @@ class MapperServicer(kmeans_pb2_grpc.MapperServicer):
             partitioned_data[reducer_id][centroid_id] = data_points
         return partitioned_data
     
-    def save_partitioned_data(self, partitioned_data, mapper_id):
+    def save_partitioned_data(self, partitioned_data, mapper_id, my_mapper_id):
         for reducer_id, data in partitioned_data.items():
-            directory = f"Mappers/M{mapper_id + 1}"
+            directory = f"Mappers/M{my_mapper_id + 1}"
             os.makedirs(directory, exist_ok=True)
             file_path = f"{directory}/partition_{reducer_id + 1}.txt"
-            with open(file_path, "w") as file:
+
+            mode = "w" if mapper_id == my_mapper_id else "a"
+            with open(file_path, mode) as file:
                 for centroid_id, data_points in data.items():
                     for point in data_points:
                         file.write(f"{centroid_id},{point[0]},{point[1]}\n")
@@ -94,8 +100,9 @@ class MapperServicer(kmeans_pb2_grpc.MapperServicer):
 def serve():
     try:
         port = input("Please enter the port number: ")
+        my_mapper_id = int(port) - 50051
         server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-        kmeans_pb2_grpc.add_MapperServicer_to_server(MapperServicer(), server)
+        kmeans_pb2_grpc.add_MapperServicer_to_server(MapperServicer(my_mapper_id), server)
         server.add_insecure_port(f'[::]:{port}')
         server.start()
         server.wait_for_termination()
