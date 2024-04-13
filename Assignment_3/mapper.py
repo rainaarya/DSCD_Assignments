@@ -5,6 +5,7 @@ import kmeans_pb2
 import kmeans_pb2_grpc
 import math
 import os
+import random
 
 class MapperServicer(kmeans_pb2_grpc.MapperServicer):
 
@@ -25,6 +26,10 @@ class MapperServicer(kmeans_pb2_grpc.MapperServicer):
         
         # Partition mapped data
         partitioned_data = self.partition_data(mapped_data, num_reducers)
+        
+        # Simulate failure with a probability of 0.2
+        if random.random() < 0.2:
+            return kmeans_pb2.MapperResponse(status="FAILED")
         
         # Save partitioned data
         self.save_partitioned_data(partitioned_data, mapper_id, self.my_mapper_id)

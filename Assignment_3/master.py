@@ -8,12 +8,16 @@ import math
 import time
 import shutil
 
+def create_grpc_stubs(num, base_port, stub_class):
+    stubs = []
+    for i in range(num):
+        channel = grpc.insecure_channel(f'localhost:{base_port + i}')
+        stub = stub_class(channel)
+        stubs.append(stub)
+    return stubs
+
 def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_retries=5):
     
-    # Delete the directories if they exist
-    for directory in ["Mappers", "Reducers"]:
-        if os.path.exists(directory):
-            shutil.rmtree(directory)
 
     # Initialize centroids randomly from input data points
     centroids = initialize_centroids(num_centroids)
@@ -21,15 +25,16 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
     
     iteration = 0
     while True:
+        # Delete the directories if they exist
+        for directory in ["Mappers", "Reducers"]:
+            if os.path.exists(directory):
+                shutil.rmtree(directory)
+        
         print(f"Iteration {iteration + 1}")
         
         # Invoke mappers
         print("Invoking Mappers...")
-        mapper_stubs = []
-        for i in range(num_mappers):
-            channel = grpc.insecure_channel(f'localhost:{50051 + i}')
-            stub = kmeans_pb2_grpc.MapperStub(channel)
-            mapper_stubs.append(stub)
+        mapper_stubs = create_grpc_stubs(num_mappers, 50051, kmeans_pb2_grpc.MapperStub)
             
         mapper_requests = []
         for i in range(num_mappers):
@@ -57,52 +62,41 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
                             print(f"Mapper ID {request.mapper_id} failed")
                     except grpc.RpcError as e:
                         failed_mappers.add(i)
-                        print(f"Mapper ID {request.mapper_id} failed")
+                        print(f"Mapper ID {request.mapper_id} failed because of gRPC error")
+                        # reset stubs
 
             if failed_mappers:
                 # Reassign failed mapper tasks to available mappers or completed mappers
                 available_mappers = set(range(num_mappers)) - failed_mappers
-                for i in failed_mappers:
+                for i in failed_mappers.copy():
                     if available_mappers:
-                        new_mapper_id = random.choice(list(available_mappers))
+                        new_mapper_id = random.choice(list(available_mappers) + [i]) # Reassign to any other available mapper or the same mapper
                         request = mapper_requests[i]
-                        #request.mapper_id = new_mapper_id
                         stub = mapper_stubs[new_mapper_id]
                         try:
                             response = stub.Map(request)
                             if response.status == "SUCCESS":
-                                mapper_responses.append((new_mapper_id, response))
+                                mapper_responses.append((i, response))
                                 print(f"Reassigned Mapper ID {i} to Mapper ID {new_mapper_id}")
+                                failed_mappers.remove(i)
                             elif response.status == "FAILED":
-                                failed_mappers.add(new_mapper_id)
                                 print(f"Reassigned Mapper ID {new_mapper_id} failed")
                         except grpc.RpcError as e:
-                            failed_mappers.add(new_mapper_id)
-                            print(f"Reassigned Mapper ID {new_mapper_id} failed")
+                            print(f"Reassigned Mapper ID {new_mapper_id} failed because of gRPC error")
                     else:
                         try:
-                            raise Exception("All mappers failed, waiting for 5 seconds before retrying")
+                            raise Exception("All mappers failed...retrying from start")
                         except Exception as e:
                             print(e)
-                            time.sleep(5)
+                            #time.sleep(5)
                             failed_mappers = set()
 
-                            mapper_stubs = []
-                            for i in range(num_mappers):
-                                channel = grpc.insecure_channel(f'localhost:{50051 + i}')
-                                stub = kmeans_pb2_grpc.MapperStub(channel)
-                                mapper_stubs.append(stub)                                
-                            break
-
-                            
+                            mapper_stubs = create_grpc_stubs(num_mappers, 50051, kmeans_pb2_grpc.MapperStub)                              
+                            break                            
 
         # Invoke reducers
         print("Invoking Reducers...")
-        reducer_stubs = []
-        for i in range(num_reducers):
-            channel = grpc.insecure_channel(f'localhost:{60051 + i}')
-            stub = kmeans_pb2_grpc.ReducerStub(channel)
-            reducer_stubs.append(stub)
+        reducer_stubs = create_grpc_stubs(num_reducers, 60051, kmeans_pb2_grpc.ReducerStub)
 
         reducer_requests = []
         for i in range(num_reducers):
@@ -114,16 +108,17 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
 
         reducer_responses = []
         failed_reducers = set()
-        while len(reducer_responses) < num_reducers:
+        while len(reducer_responses) < num_centroids:
             for i, (stub, request) in enumerate(zip(reducer_stubs, reducer_requests)):
                 if i not in [r[0] for r in reducer_responses] and i not in failed_reducers:
                     try:
                         responses = stub.Reduce(request)
                         success = False
                         for response in responses:
-                            if response.status == "SUCCESS":
+                            if response.status == "SUCCESS" or response.status == "NO_TASKS":
                                 success = True
-                                reducer_responses.append((i, response))
+                                if response.status == "SUCCESS":
+                                    reducer_responses.append((i, response))
                                 print(f"Reducer ID {request.reducer_id} response: {response.status}")
                             elif response.status == "FAILED":
                                 failed_reducers.add(i)
@@ -133,47 +128,43 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
                             failed_reducers.add(i)
                     except grpc.RpcError as e:
                         failed_reducers.add(i)
-                        print(f"Reducer ID {request.reducer_id} failed")
+                        print(f"Reducer ID {request.reducer_id} failed because of gRPC error")
 
             if failed_reducers:
                 # Reassign failed reducer tasks to available reducers or completed reducers
                 available_reducers = set(range(num_reducers)) - failed_reducers
-                for i in failed_reducers:
+                for i in failed_reducers.copy():
                     if available_reducers:
-                        new_reducer_id = random.choice(list(available_reducers))
+                        new_reducer_id = random.choice(list(available_reducers) + [i]) # Reassign to any other available reducer or the same reducer
                         request = reducer_requests[i]
-                        #request.reducer_id = new_reducer_id
                         stub = reducer_stubs[new_reducer_id]
                         try:
                             responses = stub.Reduce(request)
                             success = False
                             for response in responses:
-                                if response.status == "SUCCESS":
+                                if response.status == "SUCCESS" or response.status == "NO_TASKS":
                                     success = True
-                                    reducer_responses.append((new_reducer_id, response))
+                                    if response.status == "SUCCESS":
+                                        reducer_responses.append((i, response))
+                                    if i in failed_reducers:
+                                        failed_reducers.remove(i)
                                     print(f"Reassigned Reducer ID {i} to Reducer ID {new_reducer_id}")
                                 elif response.status == "FAILED":
-                                    failed_reducers.add(new_reducer_id)
                                     print(f"Reassigned Reducer ID {new_reducer_id} failed")
                                     break
                             if not success:
-                                failed_reducers.add(new_reducer_id)
+                                pass
                         except grpc.RpcError as e:
-                            failed_reducers.add(new_reducer_id)
-                            print(f"Reassigned Reducer ID {new_reducer_id} failed")
+                            print(f"Reassigned Reducer ID {new_reducer_id} failed because of gRPC error")
                     else:
                         try:
-                            raise Exception("All reducers failed, waiting for 5 seconds before retrying")
+                            raise Exception("All reducers failed...retrying from start")
                         except Exception as e:
                             print(e)
-                            time.sleep(5)
+                            #time.sleep(5)
                             failed_reducers = set()
 
-                            reducer_stubs = []
-                            for i in range(num_reducers):
-                                channel = grpc.insecure_channel(f'localhost:{60051 + i}')
-                                stub = kmeans_pb2_grpc.ReducerStub(channel)
-                                reducer_stubs.append(stub)
+                            reducer_stubs = create_grpc_stubs(num_reducers, 60051, kmeans_pb2_grpc.ReducerStub)
                             break
                         
 
@@ -254,7 +245,5 @@ if __name__ == "__main__":
     num_centroids = 3
     num_iterations = 50
     
-    try:
-        run_master(num_mappers, num_reducers, num_centroids, num_iterations)
-    except Exception as e:
-        print(e)
+    run_master(num_mappers, num_reducers, num_centroids, num_iterations)
+        

@@ -4,6 +4,7 @@ from concurrent import futures
 import kmeans_pb2
 import kmeans_pb2_grpc
 import os
+import random
 
 class ReducerServicer(kmeans_pb2_grpc.ReducerServicer):
 
@@ -19,6 +20,11 @@ class ReducerServicer(kmeans_pb2_grpc.ReducerServicer):
 
         # Reduce data
         reduced_data = self.reduce_data(shuffled_data)
+
+        # Simulate failure with a probability of 0.2
+        if random.random() < 0.2:
+            yield kmeans_pb2.ReducerResponse(status="FAILED")
+            return
 
         # Save reduced data
         self.save_reduced_data(reduced_data, reducer_id, self.my_reducer_id)
