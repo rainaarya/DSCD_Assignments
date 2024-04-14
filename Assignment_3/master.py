@@ -7,6 +7,7 @@ import os
 import math
 import time
 import shutil
+import concurrent.futures
 
 def create_grpc_stubs(num, base_port, stub_class):
     stubs = []
@@ -47,23 +48,33 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
             )
             mapper_requests.append(request)
 
+        def map_request(i, stub, request):
+            try:
+                response = stub.Map(request)
+                return (i, response)
+            except grpc.RpcError as e:
+                return (i, e)
+            
         mapper_responses = []
         failed_mappers = set()
         while len(mapper_responses) < num_mappers:
-            for i, (stub, request) in enumerate(zip(mapper_stubs, mapper_requests)):
-                if i not in [m[0] for m in mapper_responses] and i not in failed_mappers:
-                    try:
-                        response = stub.Map(request)
+            futures = []
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                for i, (stub, request) in enumerate(zip(mapper_stubs, mapper_requests)):
+                    if i not in [m[0] for m in mapper_responses] and i not in failed_mappers:
+                        futures.append(executor.submit(map_request, i, stub, request))
+                for future in concurrent.futures.as_completed(futures):
+                    i, response = future.result()                       
+                    if isinstance(response, grpc.RpcError):
+                        failed_mappers.add(i)
+                        print(f"Mapper ID {i} failed because of gRPC error")
+                    else:
                         if response.status == "SUCCESS":
                             mapper_responses.append((i, response))
-                            print(f"Mapper ID {request.mapper_id} response: {response.status}")
+                            print(f"Mapper ID {i} response: {response.status}")
                         elif response.status == "FAILED":
                             failed_mappers.add(i)
-                            print(f"Mapper ID {request.mapper_id} failed")
-                    except grpc.RpcError as e:
-                        failed_mappers.add(i)
-                        print(f"Mapper ID {request.mapper_id} failed because of gRPC error")
-                        # reset stubs
+                            print(f"Mapper ID {i} failed")
 
             if failed_mappers:
                 # Reassign failed mapper tasks to available mappers or completed mappers
@@ -106,29 +117,43 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
             )
             reducer_requests.append(request)
 
+
+        def reduce_request(i, stub, request):
+            try:
+                responses = stub.Reduce(request)
+                return (i, responses)
+            except grpc.RpcError as e:
+                print("ERROR!")
+                return (i, e)
+                
+
         reducer_responses = []
         failed_reducers = set()
         while len(reducer_responses) < num_centroids:
-            for i, (stub, request) in enumerate(zip(reducer_stubs, reducer_requests)):
-                if i not in [r[0] for r in reducer_responses] and i not in failed_reducers:
+            futures = []
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                for i, (stub, request) in enumerate(zip(reducer_stubs, reducer_requests)):
+                    if i not in [r[0] for r in reducer_responses] and i not in failed_reducers:
+                        futures.append(executor.submit(reduce_request, i, stub, request))
+                for future in concurrent.futures.as_completed(futures):
+                    i, responses = future.result()
                     try:
-                        responses = stub.Reduce(request)
                         success = False
                         for response in responses:
                             if response.status == "SUCCESS" or response.status == "NO_TASKS":
                                 success = True
                                 if response.status == "SUCCESS":
                                     reducer_responses.append((i, response))
-                                print(f"Reducer ID {request.reducer_id} response: {response.status}")
+                                print(f"Reducer ID {i} response: {response.status}")
                             elif response.status == "FAILED":
                                 failed_reducers.add(i)
-                                print(f"Reducer ID {request.reducer_id} failed")
+                                print(f"Reducer ID {i} failed")
                                 break
                         if not success:
                             failed_reducers.add(i)
                     except grpc.RpcError as e:
                         failed_reducers.add(i)
-                        print(f"Reducer ID {request.reducer_id} failed because of gRPC error")
+                        print(f"Reducer ID {i} failed because of gRPC error")
 
             if failed_reducers:
                 # Reassign failed reducer tasks to available reducers or completed reducers
