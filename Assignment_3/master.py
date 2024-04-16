@@ -55,8 +55,9 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
             )
             mapper_requests.append(request)
 
-        def map_request(i, stub, request):
-            log_message(f"Executing gRPC call to Mapper ID {i}")
+        def map_request(i, stub, request, failed_task=False):
+            if not failed_task:
+                log_message(f"Executing gRPC call to Mapper ID {i}")
             try:
                 response = stub.Map(request)
                 return (i, response)
@@ -87,32 +88,36 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
             if failed_mappers:
                 # Reassign failed mapper tasks to available mappers or completed mappers
                 available_mappers = set(range(num_mappers)) - failed_mappers
-                for i in failed_mappers.copy():
-                    if available_mappers:
-                        new_mapper_id = random.choice(list(available_mappers) + [i]) # Reassign to any other available mapper or the same mapper
-                        request = mapper_requests[i]
-                        stub = mapper_stubs[new_mapper_id]
-                        try:
+                futures = []
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    for i in failed_mappers.copy():
+                        if available_mappers:
+                            new_mapper_id = random.choice(list(available_mappers) + [i]) # Reassign to any other available mapper or the same mapper
+                            request = mapper_requests[i]
+                            stub = mapper_stubs[new_mapper_id]
                             log_message(f"Executing gRPC call to Mapper ID {new_mapper_id} for mapping task of Mapper ID {i}")
-                            response = stub.Map(request)
+                            futures.append(executor.submit(map_request, i, stub, request, failed_task=True))
+                        else:
+                            try:
+                                raise Exception("All mappers failed...retrying")
+                            except Exception as e:
+                                log_message(str(e))
+                                failed_mappers = set()
+                                mapper_stubs = create_grpc_stubs(num_mappers, 50051, kmeans_pb2_grpc.MapperStub)
+                                break
+                
+                    for future in concurrent.futures.as_completed(futures):
+                        i, response = future.result()
+                        if isinstance(response, grpc.RpcError):
+                            log_message(f"Reassigned Mapper ID {i} task to Mapper ID {new_mapper_id} FAILED because of gRPC error")
+                        else:
                             if response.status == "SUCCESS":
                                 mapper_responses.append((i, response))
                                 log_message(f"Reassigned Mapper ID {i} task to Mapper ID {new_mapper_id}: SUCCESS")
                                 failed_mappers.remove(i)
                             elif response.status == "FAILED":
                                 log_message(f"Reassigned Mapper ID {i} task to Mapper ID {new_mapper_id}: FAILED")
-                        except grpc.RpcError as e:
-                            log_message(f"Reassigned Mapper ID {i} task to Mapper ID {new_mapper_id} FAILED because of gRPC error")
-                    else:
-                        try:
-                            raise Exception("All mappers failed...retrying")
-                        except Exception as e:
-                            log_message(str(e))
-                            failed_mappers = set()
-
-                            mapper_stubs = create_grpc_stubs(num_mappers, 50051, kmeans_pb2_grpc.MapperStub)                              
-                            break                            
-
+            
         # Invoke reducers
         log_message("\nInvoking Reducers...")
         reducer_stubs = create_grpc_stubs(num_reducers, 60051, kmeans_pb2_grpc.ReducerStub)
@@ -126,8 +131,9 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
             reducer_requests.append(request)
 
 
-        def reduce_request(i, stub, request):
-            log_message(f"Executing gRPC call to Reducer ID {i}")
+        def reduce_request(i, stub, request, failed_task=False):
+            if not failed_task:
+                log_message(f"Executing gRPC call to Reducer ID {i}")
             try:
                 responses = stub.Reduce(request)
                 return (i, responses)
@@ -136,12 +142,13 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
 
 
         reducer_responses = []
+        reducer_no_tasks = []
         failed_reducers = set()
         while len(reducer_responses) < num_centroids:
             futures = []
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 for i, (stub, request) in enumerate(zip(reducer_stubs, reducer_requests)):
-                    if i not in [r[0] for r in reducer_responses] and i not in failed_reducers:
+                    if i not in [r[0] for r in reducer_responses] and i not in failed_reducers and i not in reducer_no_tasks:
                         futures.append(executor.submit(reduce_request, i, stub, request))
                 for future in concurrent.futures.as_completed(futures):
                     i, responses = future.result()
@@ -152,6 +159,8 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
                                 success = True
                                 if response.status == "SUCCESS":
                                     reducer_responses.append((i, response))
+                                if response.status == "NO_TASKS":
+                                    reducer_no_tasks.append(i)
                                 log_message(f"Reducer ID {i} response: {response.status}")
                             elif response.status == "FAILED":
                                 failed_reducers.add(i)
@@ -166,20 +175,35 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
             if failed_reducers:
                 # Reassign failed reducer tasks to available reducers or completed reducers
                 available_reducers = set(range(num_reducers)) - failed_reducers
-                for i in failed_reducers.copy():
-                    if available_reducers:
-                        new_reducer_id = random.choice(list(available_reducers) + [i]) # Reassign to any other available reducer or the same reducer
-                        request = reducer_requests[i]
-                        stub = reducer_stubs[new_reducer_id]
-                        try:
+                futures = []
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    for i in failed_reducers.copy():
+                        if available_reducers:
+                            new_reducer_id = random.choice(list(available_reducers) + [i]) # Reassign to any other available reducer or the same reducer
+                            request = reducer_requests[i]
+                            stub = reducer_stubs[new_reducer_id]
                             log_message(f"Executing gRPC call to Reducer ID {new_reducer_id} for reducing task of Reducer ID {i}")
-                            responses = stub.Reduce(request)
+                            futures.append(executor.submit(reduce_request, i, stub, request, failed_task=True))
+                        else:
+                            try:
+                                raise Exception("All reducers failed...retrying")
+                            except Exception as e:
+                                log_message(str(e))
+                                failed_reducers = set()
+                                reducer_stubs = create_grpc_stubs(num_reducers, 60051, kmeans_pb2_grpc.ReducerStub)
+                                break
+                
+                    for future in concurrent.futures.as_completed(futures):
+                        i, responses = future.result()
+                        try:
                             success = False
                             for response in responses:
                                 if response.status == "SUCCESS" or response.status == "NO_TASKS":
                                     success = True
                                     if response.status == "SUCCESS":
                                         reducer_responses.append((i, response))
+                                    if response.status == "NO_TASKS":
+                                        reducer_no_tasks.append(i)
                                     if i in failed_reducers:
                                         failed_reducers.remove(i)
                                     log_message(f"Reassigned Reducer ID {i} task to Reducer ID {new_reducer_id}: {response.status}")
@@ -190,15 +214,6 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
                                 pass
                         except grpc.RpcError as e:
                             log_message(f"Reassigned Reducer ID {i} task to Reducer ID {new_reducer_id} FAILED because of gRPC error")
-                    else:
-                        try:
-                            raise Exception("All reducers failed...retrying")
-                        except Exception as e:
-                            log_message(str(e))
-                            failed_reducers = set()
-
-                            reducer_stubs = create_grpc_stubs(num_reducers, 60051, kmeans_pb2_grpc.ReducerStub)
-                            break
                         
 
         # Compile centroids
