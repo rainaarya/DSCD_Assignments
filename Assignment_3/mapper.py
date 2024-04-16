@@ -16,7 +16,7 @@ class MapperServicer(kmeans_pb2_grpc.MapperServicer):
         mapper_id = request.mapper_id
         centroids = request.centroids
         input_split = request.input_split
-        num_reducers = request.num_reducers
+        self.num_reducers = request.num_reducers
         
         # Read input split
         data_points = self.read_input_split(input_split)
@@ -25,7 +25,7 @@ class MapperServicer(kmeans_pb2_grpc.MapperServicer):
         mapped_data = self.map_data_points(data_points, centroids)
         
         # Partition mapped data
-        partitioned_data = self.partition_data(mapped_data, num_reducers)
+        partitioned_data = self.partition_data(mapped_data, self.num_reducers)
         
         # Simulate failure with a probability of 0.2
         if random.random() < 0.2:
@@ -91,16 +91,19 @@ class MapperServicer(kmeans_pb2_grpc.MapperServicer):
         return partitioned_data
     
     def save_partitioned_data(self, partitioned_data, mapper_id, my_mapper_id):
-        for reducer_id, data in partitioned_data.items():
-            directory = f"Mappers/M{my_mapper_id + 1}"
-            os.makedirs(directory, exist_ok=True)
-            file_path = f"{directory}/partition_{reducer_id + 1}.txt"
+        directory = f"Mappers/M{my_mapper_id + 1}"
+        os.makedirs(directory, exist_ok=True)
 
+        for reducer_id in range(self.num_reducers):
+            file_path = f"{directory}/partition_{reducer_id + 1}.txt"
             mode = "w" if mapper_id == my_mapper_id else "a"
+
             with open(file_path, mode) as file:
-                for centroid_id, data_points in data.items():
-                    for point in data_points:
-                        file.write(f"{centroid_id},{point[0]},{point[1]}\n")
+                if reducer_id in partitioned_data:
+                    data = partitioned_data[reducer_id]
+                    for centroid_id, data_points in data.items():
+                        for point in data_points:
+                            file.write(f"{centroid_id},{point[0]},{point[1]}\n")
 
 def serve():
     try:

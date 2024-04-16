@@ -273,9 +273,9 @@ def split_input_data(num_mappers):
     return input_splits
 
 if __name__ == "__main__":
-    num_mappers = 3
-    num_reducers = 3
-    num_centroids = 3
+    num_mappers = int(input("Enter the number of mappers: "))
+    num_reducers = int(input("Enter the number of reducers: "))
+    num_centroids = int(input("Enter the number of centroids: "))
     num_iterations = 50
     
     # clear the contents of the file dump.txt
