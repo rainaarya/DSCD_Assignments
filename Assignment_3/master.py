@@ -154,17 +154,25 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
                     i, responses = future.result()
                     try:
                         success = False
+                        counter = 0
                         for response in responses:
+                            counter += 1
                             if response.status == "SUCCESS" or response.status == "NO_TASKS":
                                 success = True
                                 if response.status == "SUCCESS":
                                     reducer_responses.append((i, response))
                                 if response.status == "NO_TASKS":
                                     reducer_no_tasks.append(i)
-                                log_message(f"Reducer ID {i} response: {response.status}")
+                                if counter > 1:
+                                    log_message(f"Reducer ID {i} response {counter}: {response.status}")
+                                else:
+                                    log_message(f"Reducer ID {i} response: {response.status}")
                             elif response.status == "FAILED":
                                 failed_reducers.add(i)
-                                log_message(f"Reducer ID {i} response: {response.status}")
+                                if counter > 1:
+                                    log_message(f"Reducer ID {i} response {counter}: {response.status}")
+                                else:
+                                    log_message(f"Reducer ID {i} response: {response.status}")
                                 break
                         if not success:
                             failed_reducers.add(i)
