@@ -9,6 +9,11 @@ import time
 import shutil
 import concurrent.futures
 
+def log_message(message):
+    print(message)
+    with open("dump.txt", "a") as file:
+        file.write(message + "\n")
+
 def create_grpc_stubs(num, base_port, stub_class):
     stubs = []
     for i in range(num):
@@ -18,11 +23,13 @@ def create_grpc_stubs(num, base_port, stub_class):
     return stubs
 
 def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_retries=5):
-    
-
     # Initialize centroids randomly from input data points
     centroids = initialize_centroids(num_centroids)
     input_splits = split_input_data(num_mappers)
+    
+    log_message("Randomly initialized centroids:")
+    for centroid in centroids:
+        log_message(f"({centroid.x}, {centroid.y})")
     
     iteration = 0
     while True:
@@ -31,10 +38,10 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
             if os.path.exists(directory):
                 shutil.rmtree(directory)
         
-        print(f"Iteration {iteration + 1}")
+        log_message(f"\nIteration {iteration + 1}")
         
         # Invoke mappers
-        print("Invoking Mappers...")
+        log_message("Invoking Mappers...")
         mapper_stubs = create_grpc_stubs(num_mappers, 50051, kmeans_pb2_grpc.MapperStub)
             
         mapper_requests = []
@@ -49,6 +56,7 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
             mapper_requests.append(request)
 
         def map_request(i, stub, request):
+            log_message(f"Executing gRPC call to Mapper ID {i}")
             try:
                 response = stub.Map(request)
                 return (i, response)
@@ -67,14 +75,14 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
                     i, response = future.result()                       
                     if isinstance(response, grpc.RpcError):
                         failed_mappers.add(i)
-                        print(f"Mapper ID {i} failed because of gRPC error")
+                        log_message(f"Mapper ID {i} failed because of gRPC error")
                     else:
                         if response.status == "SUCCESS":
                             mapper_responses.append((i, response))
-                            print(f"Mapper ID {i} response: {response.status}")
+                            log_message(f"Mapper ID {i} response: {response.status}")
                         elif response.status == "FAILED":
                             failed_mappers.add(i)
-                            print(f"Mapper ID {i} failed")
+                            log_message(f"Mapper ID {i} response: {response.status}")
 
             if failed_mappers:
                 # Reassign failed mapper tasks to available mappers or completed mappers
@@ -85,28 +93,28 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
                         request = mapper_requests[i]
                         stub = mapper_stubs[new_mapper_id]
                         try:
+                            log_message(f"Executing gRPC call to Mapper ID {new_mapper_id} for mapping task of Mapper ID {i}")
                             response = stub.Map(request)
                             if response.status == "SUCCESS":
                                 mapper_responses.append((i, response))
-                                print(f"Reassigned Mapper ID {i} to Mapper ID {new_mapper_id}")
+                                log_message(f"Reassigned Mapper ID {i} task to Mapper ID {new_mapper_id}: SUCCESS")
                                 failed_mappers.remove(i)
                             elif response.status == "FAILED":
-                                print(f"Reassigned Mapper ID {new_mapper_id} failed")
+                                log_message(f"Reassigned Mapper ID {i} task to Mapper ID {new_mapper_id}: FAILED")
                         except grpc.RpcError as e:
-                            print(f"Reassigned Mapper ID {new_mapper_id} failed because of gRPC error")
+                            log_message(f"Reassigned Mapper ID {i} task to Mapper ID {new_mapper_id} FAILED because of gRPC error")
                     else:
                         try:
-                            raise Exception("All mappers failed...retrying from start")
+                            raise Exception("All mappers failed...retrying")
                         except Exception as e:
-                            print(e)
-                            #time.sleep(5)
+                            log_message(str(e))
                             failed_mappers = set()
 
                             mapper_stubs = create_grpc_stubs(num_mappers, 50051, kmeans_pb2_grpc.MapperStub)                              
                             break                            
 
         # Invoke reducers
-        print("Invoking Reducers...")
+        log_message("\nInvoking Reducers...")
         reducer_stubs = create_grpc_stubs(num_reducers, 60051, kmeans_pb2_grpc.ReducerStub)
 
         reducer_requests = []
@@ -119,13 +127,13 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
 
 
         def reduce_request(i, stub, request):
+            log_message(f"Executing gRPC call to Reducer ID {i}")
             try:
                 responses = stub.Reduce(request)
                 return (i, responses)
             except grpc.RpcError as e:
-                print("ERROR!")
                 return (i, e)
-                
+
 
         reducer_responses = []
         failed_reducers = set()
@@ -144,16 +152,16 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
                                 success = True
                                 if response.status == "SUCCESS":
                                     reducer_responses.append((i, response))
-                                print(f"Reducer ID {i} response: {response.status}")
+                                log_message(f"Reducer ID {i} response: {response.status}")
                             elif response.status == "FAILED":
                                 failed_reducers.add(i)
-                                print(f"Reducer ID {i} failed")
+                                log_message(f"Reducer ID {i} response: {response.status}")
                                 break
                         if not success:
                             failed_reducers.add(i)
                     except grpc.RpcError as e:
                         failed_reducers.add(i)
-                        print(f"Reducer ID {i} failed because of gRPC error")
+                        log_message(f"Reducer ID {i} failed because of gRPC error")
 
             if failed_reducers:
                 # Reassign failed reducer tasks to available reducers or completed reducers
@@ -164,6 +172,7 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
                         request = reducer_requests[i]
                         stub = reducer_stubs[new_reducer_id]
                         try:
+                            log_message(f"Executing gRPC call to Reducer ID {new_reducer_id} for reducing task of Reducer ID {i}")
                             responses = stub.Reduce(request)
                             success = False
                             for response in responses:
@@ -173,20 +182,19 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
                                         reducer_responses.append((i, response))
                                     if i in failed_reducers:
                                         failed_reducers.remove(i)
-                                    print(f"Reassigned Reducer ID {i} to Reducer ID {new_reducer_id}")
+                                    log_message(f"Reassigned Reducer ID {i} task to Reducer ID {new_reducer_id}: {response.status}")
                                 elif response.status == "FAILED":
-                                    print(f"Reassigned Reducer ID {new_reducer_id} failed")
+                                    log_message(f"Reassigned Reducer ID {i} task to Reducer ID {new_reducer_id}: FAILED")
                                     break
                             if not success:
                                 pass
                         except grpc.RpcError as e:
-                            print(f"Reassigned Reducer ID {new_reducer_id} failed because of gRPC error")
+                            log_message(f"Reassigned Reducer ID {i} task to Reducer ID {new_reducer_id} FAILED because of gRPC error")
                     else:
                         try:
-                            raise Exception("All reducers failed...retrying from start")
+                            raise Exception("All reducers failed...retrying")
                         except Exception as e:
-                            print(e)
-                            #time.sleep(5)
+                            log_message(str(e))
                             failed_reducers = set()
 
                             reducer_stubs = create_grpc_stubs(num_reducers, 60051, kmeans_pb2_grpc.ReducerStub)
@@ -194,12 +202,12 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
                         
 
         # Compile centroids
-        print("Compiling centroids...")
+        log_message("\nCompiling centroids...")
         updated_centroids = compile_centroids(reducer_responses)
         
-        print("Updated centroids:")
+        log_message("Updated centroids:")
         for centroid in updated_centroids:
-            print(centroid)
+            log_message(f"({centroid.x}, {centroid.y})")
         
         if has_converged(centroids, updated_centroids) or iteration + 1 == num_iterations:
             centroids = updated_centroids
@@ -213,7 +221,7 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
         for centroid in centroids:
             file.write(f"{centroid.x},{centroid.y}\n")
     
-    print("K-means clustering completed.")
+    log_message("K-means clustering completed.")
 
 def has_converged(prev_centroids, curr_centroids, threshold=1e-4):
     if len(prev_centroids) != len(curr_centroids):
@@ -270,5 +278,7 @@ if __name__ == "__main__":
     num_centroids = 3
     num_iterations = 50
     
+    # clear the contents of the file dump.txt
+    with open("dump.txt", "w") as file:
+        file.write("")
     run_master(num_mappers, num_reducers, num_centroids, num_iterations)
-        
