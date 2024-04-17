@@ -59,7 +59,7 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
             if not failed_task:
                 log_message(f"Executing gRPC call to Mapper ID {i}")
             try:
-                response = stub.Map(request)
+                response = stub.Map(request, timeout=3)
                 return (i, response)
             except grpc.RpcError as e:
                 return (i, e)
@@ -135,7 +135,7 @@ def run_master(num_mappers, num_reducers, num_centroids, num_iterations, max_ret
             if not failed_task:
                 log_message(f"Executing gRPC call to Reducer ID {i}")
             try:
-                responses = stub.Reduce(request)
+                responses = stub.Reduce(request, timeout=3)
                 return (i, responses)
             except grpc.RpcError as e:
                 return (i, e)
