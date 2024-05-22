@@ -1,6 +1,6 @@
 # 🌐 DSCD Assignments, W24 📚
 
-This repository contains assignments related to the **Distributed Systems course at IIIT-Delhi, Winter 2024** 🎓. Each assignment focuses on different aspects and technologies used in building distributed systems.
+This repository contains assignments related to the **Distributed Systems course at IIIT-Delhi, Winter 2024** 🎓
 
 ## 🛍️ Assignment 1: Distributed Messaging Frameworks
 
@@ -18,6 +18,9 @@ The [second assignment](Assignment_2/) focuses on implementing a modified versio
 
 The concept of [leader lease](https://www.yugabyte.com/blog/low-latency-reads-in-geo-distributed-sql-with-raft-leader-leases/) is used to address the issue of high read latencies in the traditional Raft algorithm.
 
----
+## 📊 Assignment 3: K-Means Clustering using MapReduce
+The [third assignment](Assignment_3/) focuses on implementing the K-means clustering algorithm using the MapReduce framework from scratch in a distributed manner. The implementation is done in Python and uses gRPC for communication between the master, mappers, and reducers. 
 
-Please refer to the individual assignment directories and their respective README files for more detailed information on each assignment. 📝
+The MapReduce implementation consists of the master, input split, map, partition, shuffle and sort, reduce, and centroid compilation components.
+
+---
